@@ -50,14 +50,6 @@ defineProps({
           </svg>
           <span class="text-sm">Entrar com Google</span>
         </a>
-
-        <!-- Modo Dev Simulação Rápida (para navegação instantânea em dev) -->
-        <div class="pt-4 border-t border-slate-100 flex justify-center space-x-3 text-[11px] text-slate-500">
-          <span class="font-semibold text-slate-400">Ambiente Dev:</span>
-          <a href="/login/simular?as=professor" class="text-blue-600 hover:underline font-bold">Simular Professor</a>
-          <span>&bull;</span>
-          <a href="/login/simular?as=aluno" class="text-blue-600 hover:underline font-bold">Simular Aluno</a>
-        </div>
       </div>
 
       <!-- Rodapé do Card -->
