@@ -40,9 +40,13 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user_name' => session('user_name'),
                 'user_email' => session('user_email'),
-                'user_type' => session('user_type', 'aluno'),
+                'user_type' => session('user_type', session('user_role', 'aluno')),
                 'is_logged_in' => session('is_logged_in', false),
-            ]
+            ],
+            'flash' => [
+                'success' => session('success'),
+                'error' => session('error'),
+            ],
         ];
     }
 }

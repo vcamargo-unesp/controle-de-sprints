@@ -77,33 +77,4 @@ class GoogleAuthController extends Controller
         return redirect('/');
     }
 
-    public function loginSimulado(Request $request)
-    {
-        $role = $request->query('as', 'aluno');
-
-        if ($role === 'professor') {
-            $professor = Professor::first() ?? Professor::create(['nome' => 'Prof. Isaac', 'email' => 'isaac@cti.feb.unesp.br']);
-            session([
-                'is_logged_in' => true,
-                'user_type' => 'professor',
-                'user_role' => 'professor',
-                'user_id' => $professor->id,
-                'user_name' => $professor->nome
-            ]);
-            return redirect()->route('equipes.index');
-        } else {
-            $aluno = Aluno::first() ?? Aluno::create(['nome' => 'Vitor (PO)', 'email' => 'vitor@cti.feb.unesp.br', 'papel' => 'PO', 'equipe_id' => 1]);
-            session([
-                'is_logged_in' => true,
-                'user_type' => 'aluno',
-                'user_role' => 'aluno',
-                'user_id' => $aluno->id,
-                'user_name' => $aluno->nome,
-                'equipe_id' => $aluno->equipe_id,
-                'aluno_papel' => $aluno->papel,
-                'papel' => $aluno->papel
-            ]);
-            return redirect()->route('equipes.show', ['id' => $aluno->equipe_id]);
-        }
-    }
 }

@@ -16,7 +16,6 @@ Route::get('/', function () {
 Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('google.redirect');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback']);
 Route::post('/logout', [GoogleAuthController::class, 'logout'])->name('logout');
-Route::get('/login/simular', [GoogleAuthController::class, 'loginSimulado']);
 
 // Rotas protegidas pela Trava (Middleware)
 Route::middleware(['session.auth'])->group(function () {

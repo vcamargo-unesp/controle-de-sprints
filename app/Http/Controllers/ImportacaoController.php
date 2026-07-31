@@ -10,8 +10,11 @@ class ImportacaoController extends Controller
 {
     public function importarAlunos(Request $request)
     {
+        // Aceita user_type ou user_role (compatibilidade com sessões antigas)
+        $userType = session('user_type') ?: session('user_role');
+
         // Valida se apenas professor pode importar
-        if (session('user_type') !== 'professor') {
+        if ($userType !== 'professor') {
             return back()->withErrors(['import' => 'Acesso negado: Apenas professores podem importar alunos.']);
         }
 

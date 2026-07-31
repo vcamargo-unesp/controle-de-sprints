@@ -27,6 +27,9 @@ const props = defineProps({
 
 const modalImportarAberto = ref(false);
 const arquivoCsvInput = ref(null);
+const importando = ref(false);
+const importacaoErro = ref(null);
+const importacaoSucesso = ref(null);
 
 const modalNovaEquipeAberto = ref(false);
 const novaEquipeNome = ref('');
@@ -98,13 +101,28 @@ const submeterImportacao = (event) => {
   const file = event.target.files[0];
   if (!file) return;
 
+  importando.value = true;
+  importacaoErro.value = null;
+  importacaoSucesso.value = null;
+
   const formData = new FormData();
   formData.append('arquivo_csv', file);
 
   router.post('/importar-alunos', formData, {
-    onSuccess: () => {
+    onSuccess: (page) => {
+      importando.value = false;
       modalImportarAberto.value = false;
       if (arquivoCsvInput.value) arquivoCsvInput.value.value = '';
+      importacaoSucesso.value = page.props.flash?.success || 'Alunos importados com sucesso!';
+      setTimeout(() => importacaoSucesso.value = null, 5000);
+    },
+    onError: (errors) => {
+      importando.value = false;
+      importacaoErro.value = errors.import || 'Erro ao importar o arquivo.';
+      if (arquivoCsvInput.value) arquivoCsvInput.value.value = '';
+    },
+    onFinish: () => {
+      importando.value = false;
     }
   });
 };
@@ -147,9 +165,15 @@ const submeterImportacao = (event) => {
         </div>
       </div>
 
+      <!-- Toast de Sucesso da Importação -->
+      <div v-if="importacaoSucesso" class="bg-emerald-50 text-emerald-800 text-xs p-3 rounded border border-emerald-200 font-semibold flex items-center space-x-2">
+        <CheckCircle2 class="w-4 h-4 text-emerald-600 flex-shrink-0" />
+        <span>{{ importacaoSucesso }}</span>
+      </div>
+
       <!-- Erros de Formulário/Importação -->
-      <div v-if="errors?.equipe || errors?.prof_id" class="bg-red-50 text-red-700 text-xs p-3 rounded border border-red-200 font-semibold">
-        {{ errors.equipe || errors.prof_id }}
+      <div v-if="importacaoErro || errors?.equipe || errors?.prof_id || errors?.import" class="bg-red-50 text-red-700 text-xs p-3 rounded border border-red-200 font-semibold">
+        {{ importacaoErro || errors?.import || errors?.equipe || errors?.prof_id }}
       </div>
 
       <!-- Lista de Equipes com Exibição de Orientador, GitHub, URL e Botão Editar -->
@@ -252,6 +276,11 @@ const submeterImportacao = (event) => {
         </div>
 
         <div class="p-5 space-y-4">
+          <!-- Erro de importação dentro do modal -->
+          <div v-if="importacaoErro" class="bg-red-50 text-red-700 text-xs p-2.5 rounded border border-red-200 font-semibold">
+            {{ importacaoErro }}
+          </div>
+
           <p class="text-xs text-slate-600 leading-relaxed">
             Selecione a planilha <strong>.csv</strong> exportada do sistema acadêmico. O sistema lerá e atualizará os dados dos alunos e suas respectivas equipes automaticamente.
           </p>
@@ -268,8 +297,13 @@ const submeterImportacao = (event) => {
               type="file" 
               accept=".csv,.txt"
               @change="submeterImportacao"
-              class="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#0F2537] file:text-white hover:file:bg-[#1A365D] cursor-pointer border border-slate-300 rounded p-1"
+              :disabled="importando"
+              class="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-xs file:font-bold file:bg-[#0F2537] file:text-white hover:file:bg-[#1A365D] cursor-pointer border border-slate-300 rounded p-1 disabled:opacity-50"
             />
+            <p v-if="importando" class="text-xs text-slate-500 mt-1 flex items-center space-x-1">
+              <span class="inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+              <span>Importando alunos...</span>
+            </p>
           </div>
         </div>
 
