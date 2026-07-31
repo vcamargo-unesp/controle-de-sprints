@@ -161,7 +161,7 @@ const submeterImportacao = (event) => {
         >
           <div>
             <div class="flex items-center justify-between mb-2">
-              <div class="text-xs font-mono font-extrabold text-[#9B2C2C] bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+              <div class="text-xs font-mono font-extrabold text-[#9B2C2C] bg-red-50 border border-red-200 px-2 py-0.5 rounded" :title="`ID: ${equipe.id}`">
                 {{ equipe.ano }} &bull; {{ equipe.nome }}
               </div>
 
