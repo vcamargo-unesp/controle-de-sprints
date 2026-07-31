@@ -817,7 +817,7 @@ const confirmarEncerramento = () => {
     </div>
     <!-- MODAL DE INTEGRANTES DA EQUIPE -->
     <div v-if="modalIntegrantesAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden border border-slate-200">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden border border-slate-200">
         <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
           <h3 class="text-sm font-bold flex items-center space-x-2">
             <Users class="w-4 h-4 text-emerald-400" />
