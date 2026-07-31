@@ -144,7 +144,20 @@ const salvarEdicaoTarefa = () => {
     descricao: tarefaSelecionada.value.descricao
   }, {
     preserveScroll: true,
-    preserveState: true
+    preserveState: true,
+    onSuccess: () => {
+      // Atualizar também na lista local de tarefas (Kanban ou Backlog)
+      const t = tarefas.value.find(item => item.id === tarefaSelecionada.value.id);
+      if (t) {
+        t.titulo = tarefaSelecionada.value.titulo;
+        t.descricao = tarefaSelecionada.value.descricao;
+      }
+      const tb = props.tarefasBacklog?.find(item => item.id === tarefaSelecionada.value.id);
+      if (tb) {
+        tb.titulo = tarefaSelecionada.value.titulo;
+        tb.descricao = tarefaSelecionada.value.descricao;
+      }
+    }
   });
 };
 
@@ -493,6 +506,7 @@ const confirmarEncerramento = () => {
             <input 
               v-model="tarefaSelecionada.titulo"
               @change="salvarEdicaoTarefa"
+              @blur="salvarEdicaoTarefa"
               type="text"
               placeholder="Título da Tarefa"
               class="bg-white/10 hover:bg-white/20 focus:bg-white focus:text-slate-900 text-white font-bold text-sm px-2 py-1 rounded border border-white/20 focus:outline-none w-full transition"
@@ -510,6 +524,7 @@ const confirmarEncerramento = () => {
             <textarea 
               v-model="tarefaSelecionada.descricao"
               @change="salvarEdicaoTarefa"
+              @blur="salvarEdicaoTarefa"
               rows="3"
               placeholder="Digite os detalhes e orientações desta tarefa..."
               class="w-full text-xs text-slate-800 bg-slate-50 p-2.5 rounded border border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500 focus:outline-none transition"
@@ -616,7 +631,13 @@ const confirmarEncerramento = () => {
           </div>
         </div>
 
-        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end">
+        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end space-x-2">
+          <button 
+            @click="salvarEdicaoTarefa" 
+            class="px-3.5 py-1.5 rounded bg-[#0F2537] text-white text-xs font-semibold hover:bg-[#1A365D] transition cursor-pointer"
+          >
+            Salvar Alterações
+          </button>
           <button @click="modalTarefaAberto = false" class="px-3 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer">
             Fechar
           </button>
