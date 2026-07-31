@@ -15,7 +15,9 @@ import {
   AlertCircle, 
   Calendar,
   Send,
-  Upload
+  Upload,
+  History,
+  GitCommit
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -39,6 +41,7 @@ const props = defineProps({
 
 const tarefas = ref([...props.tarefasIniciais]);
 const modalAberto = ref(false);
+const modalHistoricoAberto = ref(false);
 const tarefaSelecionada = ref(null);
 
 const modalEncerramentoAberto = ref(false);
@@ -313,8 +316,69 @@ const confirmarEncerramento = () => {
           </div>
         </div>
 
-        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end">
+        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-between items-center">
+          <button 
+            @click="modalHistoricoAberto = true" 
+            class="px-3 py-1.5 rounded bg-slate-200 text-slate-800 text-xs font-bold hover:bg-slate-300 transition flex items-center space-x-1 cursor-pointer border border-slate-300"
+          >
+            <History class="w-3.5 h-3.5 text-slate-600" />
+            <span>Ver Histórico de Movimentações ({{ tarefaSelecionada?.historicos?.length || 0 }})</span>
+          </button>
           <button @click="modalAberto = false" class="px-3 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Histórico -->
+    <div v-if="modalHistoricoAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-slate-300 flex flex-col max-h-[85vh]">
+        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <GitCommit class="w-4 h-4 text-emerald-400" />
+            <h3 class="text-xs font-bold uppercase tracking-wider">Histórico - Tarefa #{{ tarefaSelecionada?.id }}</h3>
+          </div>
+          <button @click="modalHistoricoAberto = false" class="text-slate-300 hover:text-white cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-4 space-y-3 overflow-y-auto flex-1 bg-slate-50/50">
+          <div v-if="!tarefaSelecionada?.historicos || tarefaSelecionada.historicos.length === 0" class="text-center py-8 text-xs text-slate-400">
+            Nenhuma movimentação registrada para esta tarefa ainda.
+          </div>
+
+          <div v-else class="relative border-l-2 border-slate-300 ml-3 pl-4 space-y-4 my-2">
+            <div v-for="h in tarefaSelecionada.historicos" :key="h.id" class="relative">
+              <div 
+                :class="[
+                  'absolute -left-[23px] top-0.5 w-3 h-3 rounded-full border-2 bg-white',
+                  h.tipo_acao === 'transferencia_sprint' ? 'border-amber-500 bg-amber-100' :
+                  h.tipo_acao === 'movimentacao' ? 'border-blue-500 bg-blue-100' :
+                  h.tipo_acao === 'edicao' ? 'border-purple-500 bg-purple-100' :
+                  h.tipo_acao === 'responsavel' ? 'border-emerald-500 bg-emerald-100' : 'border-slate-500'
+                ]"
+              ></div>
+
+              <div class="bg-white p-2.5 rounded border border-slate-200 shadow-2xs">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                  <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded border bg-slate-100 text-slate-700">
+                    {{ h.tipo_acao.replace('_', ' ') }}
+                  </span>
+                  <span class="text-[10px] font-mono text-slate-400">{{ h.data }}</span>
+                </div>
+                <p class="text-xs font-medium text-slate-800 leading-snug">{{ h.descricao }}</p>
+                <div class="mt-1 text-[10px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-1">
+                  <span>Autor: <strong class="text-slate-700">{{ h.autor_nome }}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-100 px-4 py-2.5 border-t border-slate-200 flex justify-end">
+          <button @click="modalHistoricoAberto = false" class="px-3.5 py-1.5 rounded bg-[#0F2537] text-white text-xs font-semibold hover:bg-[#1A365D] cursor-pointer">
             Fechar
           </button>
         </div>
