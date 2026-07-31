@@ -104,12 +104,23 @@ const abrirModalTarefa = (tarefa) => {
   modalTarefaAberto.value = true;
 };
 
-const assumirTarefa = () => {
+const assumirTarefa = (alunoId = null) => {
   if (!tarefaSelecionada.value) return;
-  router.post(`/kanban/assumir-tarefa/${tarefaSelecionada.value.id}`, {}, {
+  router.post(`/kanban/assumir-tarefa/${tarefaSelecionada.value.id}`, {
+    aluno_id: alunoId
+  }, {
     preserveScroll: true,
     onSuccess: () => {
-      modalTarefaAberto.value = false;
+      // Atualiza responsaveis localmente no estado para reflexão instantânea
+      const aluno = props.equipe.alunos?.find(a => a.id === alunoId);
+      if (aluno) {
+        const idx = tarefaSelecionada.value.responsaveis.findIndex(r => r.id === aluno.id);
+        if (idx > -1) {
+          tarefaSelecionada.value.responsaveis.splice(idx, 1);
+        } else {
+          tarefaSelecionada.value.responsaveis.push({ id: aluno.id, nome: aluno.nome });
+        }
+      }
     }
   });
 };
@@ -123,6 +134,17 @@ const enviarComentario = () => {
     onSuccess: () => {
       novoComentarioText.value = '';
     }
+  });
+};
+
+const salvarEdicaoTarefa = () => {
+  if (!tarefaSelecionada.value || !tarefaSelecionada.value.titulo) return;
+  router.post(`/kanban/editar-tarefa/${tarefaSelecionada.value.id}`, {
+    titulo: tarefaSelecionada.value.titulo,
+    descricao: tarefaSelecionada.value.descricao
+  }, {
+    preserveScroll: true,
+    preserveState: true
   });
 };
 
@@ -464,40 +486,68 @@ const confirmarEncerramento = () => {
     <!-- FASE 4: MODAL DE TAREFA E COLABORAÇÃO -->
     <div v-if="modalTarefaAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]">
-        <!-- Topbar do Modal -->
-        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
-          <h3 class="text-sm font-bold">
-            Tarefa #{{ tarefaSelecionada?.id }} - {{ tarefaSelecionada?.titulo }}
-          </h3>
-          <button @click="modalTarefaAberto = false" class="text-slate-300 hover:text-white cursor-pointer">
+        <!-- Topbar do Modal com Título Editável -->
+        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between gap-3">
+          <div class="flex items-center space-x-2 flex-1">
+            <span class="text-xs font-mono font-bold text-slate-300">#{{ tarefaSelecionada?.id }}</span>
+            <input 
+              v-model="tarefaSelecionada.titulo"
+              @change="salvarEdicaoTarefa"
+              type="text"
+              placeholder="Título da Tarefa"
+              class="bg-white/10 hover:bg-white/20 focus:bg-white focus:text-slate-900 text-white font-bold text-sm px-2 py-1 rounded border border-white/20 focus:outline-none w-full transition"
+            />
+          </div>
+          <button @click="modalTarefaAberto = false" class="text-slate-300 hover:text-white cursor-pointer shrink-0">
             <X class="w-5 h-5" />
           </button>
         </div>
 
         <div class="p-4 space-y-4 overflow-y-auto flex-1">
-          <!-- Detalhes e Responsáveis -->
+          <!-- Descrição Editável -->
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Descrição</label>
-            <div class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded border border-slate-200">
-              {{ tarefaSelecionada?.descricao || 'Sem descrição cadastrada.' }}
-            </div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Descrição (Editável)</label>
+            <textarea 
+              v-model="tarefaSelecionada.descricao"
+              @change="salvarEdicaoTarefa"
+              rows="3"
+              placeholder="Digite os detalhes e orientações desta tarefa..."
+              class="w-full text-xs text-slate-800 bg-slate-50 p-2.5 rounded border border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500 focus:outline-none transition"
+            ></textarea>
           </div>
 
-          <div class="flex items-center justify-between bg-blue-50/60 p-2.5 rounded border border-blue-200">
-            <div>
-              <span class="text-xs font-bold text-slate-800">Responsáveis: </span>
-              <span class="text-xs text-slate-700">
-                {{ tarefaSelecionada?.responsaveis?.map(r => r.nome).join(', ') || 'Nenhum integrante assumiu ainda' }}
+          <!-- Seção de Atribuição de Responsáveis da Equipe -->
+          <div class="bg-blue-50/70 p-3 rounded border border-blue-200 space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-slate-800 flex items-center space-x-1">
+                <UserCheck class="w-4 h-4 text-blue-700" />
+                <span>Atribuir Alunos Responsáveis</span>
+              </label>
+              <span class="text-[10px] text-slate-500 font-mono">
+                {{ tarefaSelecionada?.responsaveis?.length || 0 }} Selecionado(s)
               </span>
             </div>
-            <button 
-              v-if="userRole === 'aluno'"
-              @click="assumirTarefa" 
-              class="bg-[#0F2537] hover:bg-[#1A365D] text-white text-xs font-bold px-2.5 py-1 rounded transition flex items-center space-x-1 cursor-pointer"
-            >
-              <UserPlus class="w-3.5 h-3.5" />
-              <span>Assumir Tarefa</span>
-            </button>
+
+            <!-- Lista de Alunos da Equipe com Clicks/Checkboxes -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+              <button 
+                v-for="aluno in equipe.alunos" 
+                :key="aluno.id"
+                @click="assumirTarefa(aluno.id)"
+                :class="[
+                  'text-left text-xs px-2.5 py-1.5 rounded border transition flex items-center justify-between cursor-pointer select-none',
+                  tarefaSelecionada?.responsaveis?.some(r => r.id === aluno.id)
+                    ? 'bg-[#0F2537] text-white border-[#0F2537] font-bold shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 font-medium'
+                ]"
+              >
+                <div class="flex items-center space-x-1.5 truncate">
+                  <span class="font-mono text-[10px] opacity-75">#{{ aluno.n_chamada || '-' }}</span>
+                  <span class="truncate">{{ aluno.nome }}</span>
+                </div>
+                <CheckCircle2 v-if="tarefaSelecionada?.responsaveis?.some(r => r.id === aluno.id)" class="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              </button>
+            </div>
           </div>
 
           <!-- Timeline Unificada (Comentários com Destaque para Professor) -->

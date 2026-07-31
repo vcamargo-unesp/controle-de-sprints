@@ -1,0 +1,38 @@
+name: Deploy Antigravity Sprints
+
+on:
+  push:
+    branches:
+      - main # ou 'master', dependendo de como está no seu git
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🚀 Conectar no servidor e atualizar sistema
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: 4026 # Porta SSH customizada
+        script: |
+          # 1. Entra na pasta do projeto
+          cd /var/www/sprints/controle-de-sprints
+          
+          # 2. Puxa as novidades do repositório
+          git pull origin main
+          
+          # 3. Atualiza os pacotes do PHP (Composer)
+          composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+          
+          # 4. Atualiza os pacotes do Node e compila o front-end (Vite/Inertia)
+          npm install
+          npm run build
+          
+          # 5. Limpa e recria os caches do Laravel
+          php artisan optimize:clear
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache

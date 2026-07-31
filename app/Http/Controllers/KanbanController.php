@@ -166,12 +166,34 @@ class KanbanController extends Controller
         return back();
     }
 
+    public function editarTarefa(Request $request, $tarefaId)
+    {
+        $request->validate([
+            'titulo' => 'required|string|max:255',
+            'descricao' => 'nullable|string'
+        ]);
+
+        $tarefa = Tarefa::findOrFail($tarefaId);
+        $tarefa->update([
+            'titulo' => $request->input('titulo'),
+            'descricao' => $request->input('descricao')
+        ]);
+
+        return back();
+    }
+
     public function assumirTarefa(Request $request, $tarefaId)
     {
-        $alunoId = session('user_id');
-        if ($alunoId && session('user_type') === 'aluno') {
-            $tarefa = Tarefa::findOrFail($tarefaId);
-            $tarefa->responsaveis()->syncWithoutDetaching([$alunoId]);
+        $tarefa = Tarefa::findOrFail($tarefaId);
+        $alunoId = $request->input('aluno_id', session('user_id'));
+
+        if ($alunoId) {
+            // Se já for responsável, alterna (remove) ou adiciona
+            if ($tarefa->responsaveis()->where('aluno_id', $alunoId)->exists()) {
+                $tarefa->responsaveis()->detach($alunoId);
+            } else {
+                $tarefa->responsaveis()->attach($alunoId);
+            }
         }
         return back();
     }

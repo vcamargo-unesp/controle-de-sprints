@@ -36,6 +36,7 @@ Route::middleware(['session.auth'])->group(function () {
     Route::post('/equipes/{equipe_id}/backlog/criar', [KanbanController::class, 'criarTarefaBacklog']);
     Route::post('/equipes/{equipe_id}/iniciar-sprint', [KanbanController::class, 'iniciarSprint']);
     Route::post('/kanban/mover', [KanbanController::class, 'mover']);
+    Route::post('/kanban/editar-tarefa/{tarefaId}', [KanbanController::class, 'editarTarefa']);
     Route::post('/kanban/assumir-tarefa/{tarefaId}', [KanbanController::class, 'assumirTarefa']);
     Route::post('/kanban/comentario/{tarefaId}', [KanbanController::class, 'adicionarComentario']);
     Route::post('/kanban/anexo/{tarefaId}', [KanbanController::class, 'adicionarAnexo']);
