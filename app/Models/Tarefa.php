@@ -34,4 +34,9 @@ class Tarefa extends Model
     {
         return $this->hasMany(Anexo::class, 'tarefa_id');
     }
+
+    public function historicos()
+    {
+        return $this->hasMany(HistoricoTarefa::class, 'tarefa_id')->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+    }
 }

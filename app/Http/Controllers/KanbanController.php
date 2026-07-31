@@ -11,11 +11,28 @@ use App\Models\TarefaColuna;
 use App\Models\Comentario;
 use App\Models\Anexo;
 use App\Models\Equipe;
+use App\Models\HistoricoTarefa;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class KanbanController extends Controller
 {
+    private function registrarHistorico($tarefaId, $tipoAcao, $descricao, $detalhes = null)
+    {
+        $role = session('user_type', 'aluno');
+        $userId = session('user_id');
+
+        HistoricoTarefa::create([
+            'tarefa_id' => $tarefaId,
+            'aluno_id' => $role === 'aluno' ? $userId : null,
+            'prof_id' => $role === 'professor' ? $userId : null,
+            'tipo_acao' => $tipoAcao,
+            'descricao' => $descricao,
+            'detalhes' => $detalhes,
+            'created_at' => now()
+        ]);
+    }
+
     /**
      * O Ambiente de Trabalho da Equipe com 3 Abas
      */
@@ -31,12 +48,58 @@ class KanbanController extends Controller
         }])->findOrFail($equipeId);
         $isOrientador = ($role === 'professor' && $userId == $equipe->prof_id);
 
+        // Map closure para formatar dados completos da tarefa (com histórico)
+        $formatarTarefa = function ($tarefa, $colunaId = null, $colsprintId = null) {
+            return [
+                'id' => $tarefa->id,
+                'titulo' => $tarefa->titulo,
+                'descricao' => $tarefa->descricao ?? '',
+                'colsprint_id' => $colsprintId,
+                'coluna_id' => (string)$colunaId,
+                'responsaveis' => $tarefa->responsaveis->map(fn($r) => ['id' => $r->id, 'nome' => $r->nome]),
+                'comentarios' => $tarefa->comentarios->map(function($c) {
+                    return [
+                        'id' => $c->id,
+                        'texto' => $c->texto,
+                        'autor_nome' => $c->prof_id ? ($c->professor?->nome ?? 'Professor') : ($c->aluno?->nome ?? 'Aluno'),
+                        'is_professor' => !is_null($c->prof_id)
+                    ];
+                }),
+                'anexos' => $tarefa->anexos->map(function($a) {
+                    return [
+                        'id' => $a->id,
+                        'caminho' => $a->caminho,
+                        'nome_original' => $a->nome_original ?? 'Arquivo',
+                        'autor_nome' => $a->prof_id ? ($a->professor?->nome ?? 'Professor') : ($a->aluno?->nome ?? 'Aluno'),
+                        'is_professor' => !is_null($a->prof_id)
+                    ];
+                }),
+                'historicos' => $tarefa->historicos->map(function($h) {
+                    return [
+                        'id' => $h->id,
+                        'tipo_acao' => $h->tipo_acao,
+                        'descricao' => $h->descricao,
+                        'detalhes' => $h->detalhes,
+                        'data' => $h->created_at ? $h->created_at->format('d/m/Y H:i') : '',
+                        'autor_nome' => $h->prof_id ? ($h->professor?->nome ?? 'Professor') : ($h->aluno?->nome ?? 'Aluno/Sistema'),
+                        'is_professor' => !is_null($h->prof_id)
+                    ];
+                })
+            ];
+        };
+
         // 1. Aba Backlog
-        $tarefasBacklog = Tarefa::where('equipe_id', $equipeId)
-            ->whereNotIn('id', function($query) {
-                $query->select('tarefa_id')->from('tarefa_colunas');
-            })
-            ->get();
+        $tarefasBacklogRaw = Tarefa::with([
+            'responsaveis', 'comentarios.aluno', 'comentarios.professor',
+            'anexos.aluno', 'anexos.professor', 'historicos.aluno', 'historicos.professor'
+        ])
+        ->where('equipe_id', $equipeId)
+        ->whereNotIn('id', function($query) {
+            $query->select('tarefa_id')->from('tarefa_colunas');
+        })
+        ->get();
+
+        $tarefasBacklog = $tarefasBacklogRaw->map(fn($t) => $formatarTarefa($t));
 
         // 2. Sprint Atual
         $sprintIdQuery = $request->query('sprint_id');
@@ -65,39 +128,18 @@ class KanbanController extends Controller
                 'tarefa.comentarios.aluno', 
                 'tarefa.comentarios.professor',
                 'tarefa.anexos.aluno',
-                'tarefa.anexos.professor'
+                'tarefa.anexos.professor',
+                'tarefa.historicos.aluno',
+                'tarefa.historicos.professor'
             ])
             ->where('sprint_id', $sprint->id)
             ->get();
 
-            $tarefasFormatted = $tarefasColuna->map(function ($tc) use ($colunasSprint) {
+            $tarefasFormatted = $tarefasColuna->map(function ($tc) use ($colunasSprint, $formatarTarefa) {
                 $tarefa = $tc->tarefa;
                 $colSprint = $colunasSprint->firstWhere('id', $tc->colsprint_id);
-                return [
-                    'id' => $tarefa->id,
-                    'titulo' => $tarefa->titulo,
-                    'descricao' => $tarefa->descricao ?? '',
-                    'colsprint_id' => $tc->colsprint_id,
-                    'coluna_id' => $colSprint ? (string)$colSprint->coluna_id : '1',
-                    'responsaveis' => $tarefa->responsaveis->map(fn($r) => ['id' => $r->id, 'nome' => $r->nome]),
-                    'comentarios' => $tarefa->comentarios->map(function($c) {
-                        return [
-                            'id' => $c->id,
-                            'texto' => $c->texto,
-                            'autor_nome' => $c->prof_id ? ($c->professor?->nome ?? 'Professor') : ($c->aluno?->nome ?? 'Aluno'),
-                            'is_professor' => !is_null($c->prof_id)
-                        ];
-                    }),
-                    'anexos' => $tarefa->anexos->map(function($a) {
-                        return [
-                            'id' => $a->id,
-                            'caminho' => $a->caminho,
-                            'nome_original' => $a->nome_original ?? 'Arquivo',
-                            'autor_nome' => $a->prof_id ? ($a->professor?->nome ?? 'Professor') : ($a->aluno?->nome ?? 'Aluno'),
-                            'is_professor' => !is_null($a->prof_id)
-                        ];
-                    })
-                ];
+                $colunaId = $colSprint ? (string)$colSprint->coluna_id : '1';
+                return $formatarTarefa($tarefa, $colunaId, $tc->colsprint_id);
             });
 
             $colunasFormatted = $colunasSprint->map(function ($cs) {
@@ -157,11 +199,17 @@ class KanbanController extends Controller
             'descricao' => 'nullable|string'
         ]);
 
-        Tarefa::create([
+        $tarefa = Tarefa::create([
             'equipe_id' => $equipeId,
             'titulo' => $request->input('titulo'),
             'descricao' => $request->input('descricao')
         ]);
+
+        $this->registrarHistorico(
+            $tarefa->id,
+            'criacao',
+            "Tarefa criada no Backlog com título '{$tarefa->titulo}'."
+        );
 
         return back();
     }
@@ -174,10 +222,30 @@ class KanbanController extends Controller
         ]);
 
         $tarefa = Tarefa::findOrFail($tarefaId);
+        $alteracoes = [];
+
+        if ($tarefa->titulo !== $request->input('titulo')) {
+            $alteracoes[] = "Título alterado de '{$tarefa->titulo}' para '{$request->input('titulo')}'";
+        }
+
+        $novaDesc = $request->input('descricao') ?? '';
+        $descAntiga = $tarefa->descricao ?? '';
+        if ($descAntiga !== $novaDesc) {
+            $alteracoes[] = "Descrição da tarefa atualizada";
+        }
+
         $tarefa->update([
             'titulo' => $request->input('titulo'),
             'descricao' => $request->input('descricao')
         ]);
+
+        if (!empty($alteracoes)) {
+            $this->registrarHistorico(
+                $tarefa->id,
+                'edicao',
+                implode('. ', $alteracoes) . '.'
+            );
+        }
 
         return back();
     }
@@ -188,11 +256,23 @@ class KanbanController extends Controller
         $alunoId = $request->input('aluno_id', session('user_id'));
 
         if ($alunoId) {
-            // Se já for responsável, alterna (remove) ou adiciona
+            $aluno = \App\Models\Aluno::find($alunoId);
+            $nomeAluno = $aluno ? $aluno->nome : 'Aluno';
+
             if ($tarefa->responsaveis()->where('aluno_id', $alunoId)->exists()) {
                 $tarefa->responsaveis()->detach($alunoId);
+                $this->registrarHistorico(
+                    $tarefa->id,
+                    'responsavel',
+                    "Removida a atribuição do responsável {$nomeAluno}."
+                );
             } else {
                 $tarefa->responsaveis()->attach($alunoId);
+                $this->registrarHistorico(
+                    $tarefa->id,
+                    'responsavel',
+                    "Atribuído o responsável {$nomeAluno} à tarefa."
+                );
             }
         }
         return back();
@@ -211,6 +291,12 @@ class KanbanController extends Controller
             'prof_id' => $role === 'professor' ? $userId : null,
             'texto' => $request->input('texto')
         ]);
+
+        $this->registrarHistorico(
+            $tarefaId,
+            'comentario',
+            "Novo comentário adicionado à tarefa."
+        );
 
         return back();
     }
@@ -235,6 +321,12 @@ class KanbanController extends Controller
             'caminho' => $path,
             'nome_original' => $nomeOriginal
         ]);
+
+        $this->registrarHistorico(
+            $tarefaId,
+            'anexo',
+            "Novo arquivo anexado: '{$nomeOriginal}'."
+        );
 
         return back();
     }
@@ -290,6 +382,12 @@ class KanbanController extends Controller
                     'sprint_id' => $novaSprint->id,
                     'sequencia' => 1
                 ]);
+
+                $this->registrarHistorico(
+                    $tId,
+                    'transferencia_sprint',
+                    "Tarefa transferida do Backlog para a Sprint {$novaSprint->sequencia}."
+                );
             }
         });
 
@@ -312,11 +410,20 @@ class KanbanController extends Controller
             ->first();
 
         if ($colSprint) {
+            $colunaDestino = Coluna::find($novaColunaId);
+            $nomeColuna = $colunaDestino ? $colunaDestino->titulo : 'Nova Coluna';
+
             TarefaColuna::where('sprint_id', $sprintId)
                 ->where('tarefa_id', $tarefaId)
                 ->update(['colsprint_id' => $colSprint->id]);
 
             Tarefa::where('id', $tarefaId)->update(['ultimacoluna_id' => $novaColunaId]);
+
+            $this->registrarHistorico(
+                $tarefaId,
+                'movimentacao',
+                "Tarefa movida para a coluna '{$nomeColuna}' na Sprint {$sprint->sequencia}."
+            );
 
             $sprint->calcularPercentualConclusao();
         }
@@ -332,7 +439,6 @@ class KanbanController extends Controller
         $sprintAtual = Sprint::findOrFail($sprintId);
         $equipe = Equipe::findOrFail($sprintAtual->equipe_id);
 
-        // Trava de Orientador: Apenas o professor orientador que bate com prof_id pode encerrar
         if (session('user_type') !== 'professor' || session('user_id') != $equipe->prof_id) {
             return back()->withErrors(['orientador' => 'Acesso negado: Apenas o professor orientador desta equipe pode encerrar a sprint.']);
         }
@@ -346,15 +452,26 @@ class KanbanController extends Controller
             ]);
 
             // Repassar tarefas pendentes para o Backlog
-            $tarefasNaoConcluidasIds = TarefaColuna::join('col_sprints', 'tarefa_colunas.colsprint_id', '=', 'col_sprints.id')
+            $tarefasNaoConcluidas = TarefaColuna::join('col_sprints', 'tarefa_colunas.colsprint_id', '=', 'col_sprints.id')
                 ->join('colunas', 'col_sprints.coluna_id', '=', 'colunas.id')
                 ->where('tarefa_colunas.sprint_id', $sprintAtual->id)
                 ->where('colunas.concluido', false)
-                ->pluck('tarefa_colunas.id');
+                ->select('tarefa_colunas.id', 'tarefa_colunas.tarefa_id')
+                ->get();
 
-            TarefaColuna::whereIn('id', $tarefasNaoConcluidasIds)->delete();
+            foreach ($tarefasNaoConcluidas as $tc) {
+                $this->registrarHistorico(
+                    $tc->tarefa_id,
+                    'transferencia_sprint',
+                    "Sprint {$sprintAtual->sequencia} encerrada com pendência: Tarefa devolvida automaticamente da Sprint {$sprintAtual->sequencia} para o Backlog."
+                );
+            }
+
+            TarefaColuna::whereIn('id', $tarefasNaoConcluidas->pluck('id'))->delete();
         });
 
         return back();
     }
+}
+
 }
