@@ -350,10 +350,17 @@ class KanbanController extends Controller
 
         $ultimaSprint = Sprint::where('equipe_id', $equipeId)->max('sequencia') ?? 0;
 
-        DB::transaction(function () use ($equipeId, $ultimaSprint, $tarefasIds) {
+        // Se for a primeira sprint e foi informada uma sequência inicial, usa ela
+        if ($ultimaSprint === 0 && $request->filled('sequencia_inicial')) {
+            $proximaSequencia = max(1, (int) $request->input('sequencia_inicial'));
+        } else {
+            $proximaSequencia = $ultimaSprint + 1;
+        }
+
+        DB::transaction(function () use ($equipeId, $proximaSequencia, $tarefasIds) {
             $novaSprint = Sprint::create([
                 'equipe_id' => $equipeId,
-                'sequencia' => $ultimaSprint + 1,
+                'sequencia' => $proximaSequencia,
                 'dt_inicio' => date('Y-m-d'),
                 'dt_fim' => date('Y-m-d', strtotime('+15 days')),
                 'percentual' => 0.00,
