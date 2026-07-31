@@ -49,7 +49,7 @@ class KanbanController extends Controller
         $isOrientador = ($role === 'professor' && $userId == $equipe->prof_id);
 
         // Map closure para formatar dados completos da tarefa (com histórico)
-        $formatarTarefa = function ($tarefa, $colunaId = null, $colsprintId = null) {
+        $formatarTarefa = function ($tarefa, $colunaId = null, $colsprintId = null) use ($equipe) {
             return [
                 'id' => $tarefa->id,
                 'titulo' => $tarefa->titulo,
@@ -57,24 +57,26 @@ class KanbanController extends Controller
                 'colsprint_id' => $colsprintId,
                 'coluna_id' => (string)$colunaId,
                 'responsaveis' => $tarefa->responsaveis->map(fn($r) => ['id' => $r->id, 'nome' => $r->nome]),
-                'comentarios' => $tarefa->comentarios->map(function($c) {
+                'comentarios' => $tarefa->comentarios->map(function($c) use ($equipe) {
                     return [
                         'id' => $c->id,
                         'texto' => $c->texto,
                         'autor_nome' => $c->prof_id ? ($c->professor?->nome ?? 'Professor') : ($c->aluno?->nome ?? 'Aluno'),
-                        'is_professor' => !is_null($c->prof_id)
+                        'is_professor' => !is_null($c->prof_id),
+                        'is_orientador' => !is_null($c->prof_id) && $c->prof_id == $equipe->prof_id
                     ];
                 }),
-                'anexos' => $tarefa->anexos->map(function($a) {
+                'anexos' => $tarefa->anexos->map(function($a) use ($equipe) {
                     return [
                         'id' => $a->id,
                         'caminho' => $a->caminho,
                         'nome_original' => $a->nome_original ?? 'Arquivo',
                         'autor_nome' => $a->prof_id ? ($a->professor?->nome ?? 'Professor') : ($a->aluno?->nome ?? 'Aluno'),
-                        'is_professor' => !is_null($a->prof_id)
+                        'is_professor' => !is_null($a->prof_id),
+                        'is_orientador' => !is_null($a->prof_id) && $a->prof_id == $equipe->prof_id
                     ];
                 }),
-                'historicos' => $tarefa->historicos->map(function($h) {
+                'historicos' => $tarefa->historicos->map(function($h) use ($equipe) {
                     return [
                         'id' => $h->id,
                         'tipo_acao' => $h->tipo_acao,
@@ -82,7 +84,8 @@ class KanbanController extends Controller
                         'detalhes' => $h->detalhes,
                         'data' => $h->created_at ? $h->created_at->format('d/m/Y H:i') : '',
                         'autor_nome' => $h->prof_id ? ($h->professor?->nome ?? 'Professor') : ($h->aluno?->nome ?? 'Aluno/Sistema'),
-                        'is_professor' => !is_null($h->prof_id)
+                        'is_professor' => !is_null($h->prof_id),
+                        'is_orientador' => !is_null($h->prof_id) && $h->prof_id == $equipe->prof_id
                     ];
                 })
             ];

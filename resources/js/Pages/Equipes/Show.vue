@@ -738,7 +738,8 @@ const confirmarEncerramento = () => {
 
                 <div class="mt-1 text-[10px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-1">
                   <span>Autor: <strong class="text-slate-700">{{ h.autor_nome }}</strong></span>
-                  <span v-if="h.is_professor" class="text-amber-700 font-bold">(Orientador)</span>
+                  <span v-if="h.is_orientador" class="text-amber-700 font-bold">(Orientador)</span>
+                  <span v-else-if="h.is_professor" class="text-slate-500 font-semibold">(Professor)</span>
                 </div>
               </div>
             </div>
