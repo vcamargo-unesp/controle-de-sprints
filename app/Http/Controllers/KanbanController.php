@@ -473,5 +473,3 @@ class KanbanController extends Controller
         return back();
     }
 }
-
-}
