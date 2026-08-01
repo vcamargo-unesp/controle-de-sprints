@@ -36,9 +36,12 @@ const props = defineProps({
   userRole: String,
   userId: Number,
   isOrientador: Boolean,
+  isTL: Boolean,
+  canManageColunas: Boolean,
   isPO: Boolean,
   sprint: Object,
   colunas: Array,
+  todasColunas: Array,
   tarefasIniciais: Array,
   tarefasBacklog: Array,
   sprintsAnteriores: Array
@@ -158,12 +161,106 @@ const iniciarPolling = () => {
   pollingTimer = setInterval(() => {
     isSyncing.value = true;
     router.reload({
-      only: ['tarefasIniciais', 'tarefasBacklog'],
+      only: ['tarefasIniciais', 'tarefasBacklog', 'colunas', 'todasColunas'],
       preserveScroll: true,
       preserveState: true,
       onFinish: () => { isSyncing.value = false; }
     });
   }, 5000); // a cada 5 segundos
+};
+
+// ─── Gerenciamento de Colunas ──────────────────────────────────────────────
+const ORDEM_PADRAO_TITULOS = ['A FAZER', 'FAZENDO', 'EM TESTE', 'CONCLUÍDO'];
+
+const modalGerenciarColunasAberto = ref(false);
+const colunasEditaveis = ref([]);
+const novaColunasTitulo = ref('');
+const erroOrdem = ref('');
+const colunaDragIdx = ref(null);
+
+const abrirGerenciarColunas = () => {
+  colunasEditaveis.value = [...(props.todasColunas || [])].sort((a, b) => a.sequencia - b.sequencia);
+  erroOrdem.value = '';
+  novaColunasTitulo.value = '';
+  modalGerenciarColunasAberto.value = true;
+};
+
+const validarOrdemLocal = (cols) => {
+  if (cols[cols.length - 1]?.titulo !== 'CONCLUÍDO') {
+    return 'CONCLUÍDO deve ser a última coluna.';
+  }
+  let prevIdx = -1;
+  for (const col of cols) {
+    const idx = ORDEM_PADRAO_TITULOS.indexOf(col.titulo);
+    if (idx === -1) continue; // coluna custom, ignora
+    if (idx <= prevIdx) return 'A ordem obrigatória é: A FAZER → FAZENDO → EM TESTE → CONCLUÍDO (colunas customizadas podem ir entre elas).';
+    prevIdx = idx;
+  }
+  return '';
+};
+
+// Drag-drop no modal
+const onColunaDragStart = (e, idx) => {
+  colunaDragIdx.value = idx;
+  e.dataTransfer.effectAllowed = 'move';
+};
+const onColunaDragOver = (e, idx) => {
+  e.preventDefault();
+  if (colunaDragIdx.value === null || colunaDragIdx.value === idx) return;
+  const arr = [...colunasEditaveis.value];
+  const [moved] = arr.splice(colunaDragIdx.value, 1);
+  arr.splice(idx, 0, moved);
+  const erro = validarOrdemLocal(arr);
+  erroOrdem.value = erro;
+  if (!erro) { colunasEditaveis.value = arr; colunaDragIdx.value = idx; }
+};
+const onColunaDragEnd = () => { colunaDragIdx.value = null; };
+
+// Mover com setas (alternativa ao drag)
+const moverColuna = (idx, direcao) => {
+  const arr = [...colunasEditaveis.value];
+  const novoIdx = idx + direcao;
+  if (novoIdx < 0 || novoIdx >= arr.length) return;
+  [arr[idx], arr[novoIdx]] = [arr[novoIdx], arr[idx]];
+  const erro = validarOrdemLocal(arr);
+  erroOrdem.value = erro;
+  if (!erro) colunasEditaveis.value = arr;
+};
+
+const salvarOrdemColunas = () => {
+  const erro = validarOrdemLocal(colunasEditaveis.value);
+  if (erro) { erroOrdem.value = erro; return; }
+  const ordem = colunasEditaveis.value.map(c => ({ id: c.id, titulo: c.titulo }));
+  router.post(`/equipes/${props.equipe.id}/colunas/reordenar`, { ordem }, {
+    preserveScroll: true,
+    preserveState: true,
+    onSuccess: () => { modalGerenciarColunasAberto.value = false; }
+  });
+};
+
+const adicionarColuna = () => {
+  if (!novaColunasTitulo.value.trim()) return;
+  router.post(`/equipes/${props.equipe.id}/colunas`, { titulo: novaColunasTitulo.value.trim() }, {
+    preserveScroll: true,
+    preserveState: true,
+    onSuccess: () => {
+      novaColunasTitulo.value = '';
+      colunasEditaveis.value = [...(props.todasColunas || [])].sort((a, b) => a.sequencia - b.sequencia);
+    }
+  });
+};
+
+const removerColuna = (col) => {
+  if (col.is_padrao) return;
+  if (col.tem_tarefas) { alert('Mova todas as tarefas desta coluna antes de removê-la.'); return; }
+  if (!confirm(`Remover a coluna "${col.titulo}"?`)) return;
+  router.delete(`/equipes/${props.equipe.id}/colunas/${col.id}`, {}, {
+    preserveScroll: true,
+    preserveState: true,
+    onSuccess: () => {
+      colunasEditaveis.value = colunasEditaveis.value.filter(c => c.id !== col.id);
+    }
+  });
 };
 
 onMounted(() => iniciarPolling());
@@ -515,12 +612,30 @@ const parseDetalhes = (detalhes) => {
         </div>
 
         <div v-if="isOrientador && !sprint.encerrada" class="flex items-center space-x-2">
+          <button
+            v-if="canManageColunas"
+            @click="abrirGerenciarColunas"
+            class="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-xs px-3 py-1.5 rounded transition flex items-center space-x-1 cursor-pointer"
+          >
+            <Kanban class="w-3.5 h-3.5" />
+            <span>Gerenciar Colunas</span>
+          </button>
           <button 
             @click="modalEncerramentoAberto = true"
             class="bg-[#9B2C2C] hover:bg-[#7B1D1D] text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"
           >
             <CheckCircle2 class="w-4 h-4" />
             <span>Encerrar Sprint e Avaliar</span>
+          </button>
+        </div>
+        <!-- Botão gerenciar colunas para TL (sem ser orientador) -->
+        <div v-else-if="isTL && sprint && !sprint.encerrada">
+          <button
+            @click="abrirGerenciarColunas"
+            class="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold text-xs px-3 py-1.5 rounded transition flex items-center space-x-1 cursor-pointer"
+          >
+            <Kanban class="w-3.5 h-3.5" />
+            <span>Gerenciar Colunas</span>
           </button>
         </div>
       </div>
@@ -539,11 +654,16 @@ const parseDetalhes = (detalhes) => {
         </Link>
       </div>
 
-      <!-- Quadro Kanban de 4 Colunas Clássicas -->
+      <!-- Quadro Kanban Dinâmico -->
       <div 
         v-else 
         :class="[
-          'grid grid-cols-1 md:grid-cols-4 gap-3',
+          'grid gap-3',
+          colunas.length === 1 ? 'grid-cols-1' :
+          colunas.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
+          colunas.length === 3 ? 'grid-cols-1 md:grid-cols-3' :
+          colunas.length === 4 ? 'grid-cols-1 md:grid-cols-4' :
+          colunas.length === 5 ? 'grid-cols-1 md:grid-cols-5' : 'grid-cols-1 md:grid-cols-6 overflow-x-auto',
           sprint.bloqueadaPorPrazo ? 'opacity-75' : ''
         ]"
       >
@@ -1144,6 +1264,118 @@ const parseDetalhes = (detalhes) => {
           >
             <Send class="w-3.5 h-3.5" />
             <span>Iniciar Sprint {{ sequenciaInicialSprint }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE GERENCIAMENTO DE COLUNAS -->
+    <div v-if="modalGerenciarColunasAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-slate-300 flex flex-col max-h-[85vh]">
+        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <Kanban class="w-4 h-4 text-emerald-400" />
+            <h3 class="text-xs font-bold uppercase tracking-wider">Gerenciar Colunas do Kanban</h3>
+          </div>
+          <button @click="modalGerenciarColunasAberto = false" class="text-slate-300 hover:text-white cursor-pointer">
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-4 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+          <!-- Alerta de erro de ordenação -->
+          <div v-if="erroOrdem" class="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded text-xs">
+            {{ erroOrdem }}
+          </div>
+
+          <!-- Form de Criação de Coluna Customizada -->
+          <div class="bg-white p-3 rounded border border-slate-200 shadow-2xs space-y-2">
+            <label class="block text-xs font-bold text-slate-700">Criar Nova Coluna Customizada</label>
+            <div class="flex gap-2">
+              <input
+                v-model="novaColunasTitulo"
+                type="text"
+                placeholder="Ex: EM REVISÃO, REFINAMENTO..."
+                class="flex-1 border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-1 focus:ring-slate-500 focus:outline-none uppercase"
+                @keyup.enter="adicionarColuna"
+              />
+              <button
+                @click="adicionarColuna"
+                :disabled="!novaColunasTitulo.trim()"
+                class="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs px-3 py-1 rounded transition cursor-pointer flex items-center space-x-1"
+              >
+                <Plus class="w-3.5 h-3.5" />
+                <span>Adicionar</span>
+              </button>
+            </div>
+            <p class="text-[10px] text-slate-500">As novas colunas são inseridas por padrão antes da coluna <strong>CONCLUÍDO</strong>.</p>
+          </div>
+
+          <!-- Lista de Colunas Reordenáveis -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-700">Ordem das Colunas (Arraste ou use as setas)</label>
+            
+            <div
+              v-for="(col, idx) in colunasEditaveis"
+              :key="col.id"
+              draggable="true"
+              @dragstart="onColunaDragStart($event, idx)"
+              @dragover="onColunaDragOver($event, idx)"
+              @dragend="onColunaDragEnd"
+              :class="[
+                'flex items-center justify-between p-2.5 rounded border text-xs font-medium bg-white transition shadow-2xs',
+                col.is_padrao ? 'border-slate-300 bg-slate-50/70' : 'border-blue-200 bg-blue-50/30'
+              ]"
+            >
+              <div class="flex items-center space-x-2">
+                <span class="text-slate-400 font-mono text-[10px]">#{{ idx + 1 }}</span>
+                <span class="font-bold text-slate-800">{{ col.titulo }}</span>
+                <span v-if="col.is_padrao" class="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold uppercase">Padrão</span>
+                <span v-else class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-semibold uppercase">Customizada</span>
+              </div>
+
+              <div class="flex items-center space-x-1">
+                <!-- Botões para mover -->
+                <button
+                  @click="moverColuna(idx, -1)"
+                  :disabled="idx === 0"
+                  class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                  title="Mover para esquerda/cima"
+                >▲</button>
+                <button
+                  @click="moverColuna(idx, 1)"
+                  :disabled="idx === colunasEditaveis.length - 1"
+                  class="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                  title="Mover para direita/baixo"
+                >▼</button>
+
+                <!-- Botão de Deletar (somente customizáveis) -->
+                <button
+                  v-if="!col.is_padrao"
+                  @click="removerColuna(col)"
+                  class="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer ml-1"
+                  title="Remover coluna"
+                >
+                  <Trash2 class="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button
+            @click="modalGerenciarColunasAberto = false"
+            class="px-3.5 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            @click="salvarOrdemColunas"
+            :disabled="!!erroOrdem"
+            class="px-3.5 py-1.5 rounded bg-[#0F2537] text-white text-xs font-semibold hover:bg-[#1A365D] disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
+          >
+            <span>Salvar Nova Ordem</span>
           </button>
         </div>
       </div>

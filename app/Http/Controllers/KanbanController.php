@@ -18,6 +18,12 @@ use Inertia\Inertia;
 
 class KanbanController extends Controller
 {
+    // Colunas padrão que não podem ser removidas nem ter a ordem relativa alterada
+    private const COLUNAS_PADRAO        = ['A FAZER', 'FAZENDO', 'EM TESTE', 'CONCLUÍDO'];
+    private const COLUNA_CONCLUIDO      = 'CONCLUÍDO';
+    // Ordem obrigatória entre padrões: índice menor = deve vir antes
+    private const ORDEM_PADRAO          = ['A FAZER' => 0, 'FAZENDO' => 1, 'EM TESTE' => 2, 'CONCLUÍDO' => 3];
+
     private function registrarHistorico($tarefaId, $tipoAcao, $descricao, $detalhes = null)
     {
         $role = session('user_type', 'aluno');
@@ -48,6 +54,8 @@ class KanbanController extends Controller
             $query->orderBy('n_chamada', 'asc')->orderBy('nome', 'asc');
         }])->findOrFail($equipeId);
         $isOrientador = ($role === 'professor' && $userId == $equipe->prof_id);
+        $isTL         = ($role === 'aluno'     && $alunoPapel === 'TL');
+        $canManageColunas = $isTL || $isOrientador;
 
         // Map closure para formatar dados completos da tarefa (com histórico)
         $formatarTarefa = function ($tarefa, $colunaId = null, $colsprintId = null) use ($equipe) {
@@ -165,26 +173,48 @@ class KanbanController extends Controller
             ->orderBy('sequencia', 'desc')
             ->get();
 
+        // 4. Todas as colunas da equipe (para painel de gerenciamento)
+        $todasColunas = Coluna::where('equipe_id', $equipeId)
+            ->orderBy('sequencia')
+            ->get()
+            ->map(function ($col) {
+                $temTarefas = TarefaColuna::whereIn(
+                    'colsprint_id',
+                    ColSprint::where('coluna_id', $col->id)->pluck('id')
+                )->exists();
+                return [
+                    'id'        => $col->id,
+                    'titulo'    => $col->titulo,
+                    'sequencia' => $col->sequencia,
+                    'concluido' => $col->concluido,
+                    'is_padrao' => in_array($col->titulo, self::COLUNAS_PADRAO),
+                    'tem_tarefas' => $temTarefas,
+                ];
+            });
+
         return Inertia::render('Equipes/Show', [
-            'equipe' => $equipe,
-            'abaAtiva' => $aba,
-            'userRole' => $role,
-            'userId' => $userId,
-            'isOrientador' => $isOrientador,
-            'isPO' => ($role === 'aluno' && $alunoPapel === 'PO') || $isOrientador,
-            'sprint' => $sprint ? [
-                'id' => $sprint->id,
-                'nome' => "Sprint {$sprint->sequencia}",
-                'dt_inicio' => $sprint->dt_inicio,
-                'dt_fim' => $sprint->dt_fim,
-                'percentual' => $sprint->percentual ?? 0,
-                'feedback' => $sprint->feedback ?? '',
-                'encerrada' => $sprint->encerrada,
+            'equipe'           => $equipe,
+            'abaAtiva'         => $aba,
+            'userRole'         => $role,
+            'userId'           => $userId,
+            'isOrientador'     => $isOrientador,
+            'isTL'             => $isTL,
+            'canManageColunas' => $canManageColunas,
+            'isPO'             => ($role === 'aluno' && $alunoPapel === 'PO') || $isOrientador,
+            'sprint'           => $sprint ? [
+                'id'             => $sprint->id,
+                'nome'           => "Sprint {$sprint->sequencia}",
+                'dt_inicio'      => $sprint->dt_inicio,
+                'dt_fim'         => $sprint->dt_fim,
+                'percentual'     => $sprint->percentual ?? 0,
+                'feedback'       => $sprint->feedback ?? '',
+                'encerrada'      => $sprint->encerrada,
                 'bloqueadaPorPrazo' => $bloqueadaPorPrazo
             ] : null,
-            'colunas' => $colunasFormatted,
-            'tarefasIniciais' => $tarefasFormatted,
-            'tarefasBacklog' => $tarefasBacklog,
+            'colunas'          => $colunasFormatted,
+            'todasColunas'     => $todasColunas,
+            'tarefasIniciais'  => $tarefasFormatted,
+            'tarefasBacklog'   => $tarefasBacklog,
             'sprintsAnteriores' => $sprintsAnteriores
         ]);
     }
@@ -560,7 +590,7 @@ class KanbanController extends Controller
         DB::transaction(function () use ($sprintAtual, $request) {
             $percentualFinal = $sprintAtual->calcularPercentualConclusao();
             $sprintAtual->update([
-                'dt_fim' => date('Y-m-d'),
+                'dt_fim'   => date('Y-m-d'),
                 'feedback' => $request->input('feedback'),
                 'encerrada' => true
             ]);
@@ -582,6 +612,161 @@ class KanbanController extends Controller
             }
 
             TarefaColuna::whereIn('id', $tarefasNaoConcluidas->pluck('id'))->delete();
+        });
+
+        return back();
+    }
+
+    // =========================================================================
+    // GERENCIAMENTO DE COLUNAS (Tech Leader / Orientador)
+    // =========================================================================
+
+    /**
+     * Valida que a lista de colunas obedece à ordem obrigatória das padrões.
+     * Retorna null se válida ou uma mensagem de erro.
+     */
+    private function validarOrdemColunas(array $colunas): ?string
+    {
+        $prevOrdem = -1;
+        $ultimoTitulo = end($colunas)['titulo'] ?? null;
+
+        if ($ultimoTitulo !== self::COLUNA_CONCLUIDO) {
+            return 'A coluna “CONCLUÍDO” deve ser sempre a última.';
+        }
+
+        foreach ($colunas as $col) {
+            if (!array_key_exists($col['titulo'], self::ORDEM_PADRAO)) continue;
+            $ordemAtual = self::ORDEM_PADRAO[$col['titulo']];
+            if ($ordemAtual <= $prevOrdem) {
+                return 'A ordem das colunas padrão deve ser: A FAZER → FAZENDO → EM TESTE → CONCLUÍDO (podem haver colunas customizadas entre elas).';
+            }
+            $prevOrdem = $ordemAtual;
+        }
+
+        return null;
+    }
+
+    public function criarColuna(Request $request, $equipeId)
+    {
+        $equipe = Equipe::findOrFail($equipeId);
+        $role       = session('user_type', 'aluno');
+        $alunoPapel = session('papel', session('aluno_papel'));
+        $userId     = session('user_id');
+
+        $isOrientador     = ($role === 'professor' && $userId == $equipe->prof_id);
+        $isTL             = ($role === 'aluno'     && $alunoPapel === 'TL');
+        $canManageColunas = $isOrientador || $isTL;
+
+        if (!$canManageColunas) {
+            return back()->withErrors(['coluna' => 'Apenas o Tech Leader ou o orientador podem criar colunas.']);
+        }
+
+        $request->validate(['titulo' => 'required|string|max:100']);
+        $titulo = strtoupper(trim($request->input('titulo')));
+
+        if (in_array($titulo, self::COLUNAS_PADRAO)) {
+            return back()->withErrors(['coluna' => 'Esse nome é reservado para uma coluna padrão.']);
+        }
+
+        // Inserir antes de CONCLUÍDO (que sempre fica por último)
+        $concluido = Coluna::where('equipe_id', $equipeId)
+            ->where('titulo', self::COLUNA_CONCLUIDO)
+            ->first();
+
+        $seqConcluido = $concluido ? $concluido->sequencia : 999;
+
+        // Empurrar CONCLUÍDO e qualquer coluna após a posição de inserção
+        Coluna::where('equipe_id', $equipeId)
+            ->where('sequencia', '>=', $seqConcluido)
+            ->increment('sequencia');
+
+        $novaColuna = Coluna::create([
+            'titulo'     => $titulo,
+            'sequencia'  => $seqConcluido,   // ocupa o slot antes de CONCLUÍDO
+            'equipe_id'  => $equipeId,
+            'concluido'  => false,
+        ]);
+
+        // Adicionar à sprint ativa (se houver)
+        $sprintAtiva = Sprint::where('equipe_id', $equipeId)->where('encerrada', false)->first();
+        if ($sprintAtiva) {
+            ColSprint::create([
+                'coluna_id' => $novaColuna->id,
+                'sprint_id' => $sprintAtiva->id,
+            ]);
+        }
+
+        return back();
+    }
+
+    public function deletarColuna(Request $request, $equipeId, $colunaId)
+    {
+        $equipe = Equipe::findOrFail($equipeId);
+        $role       = session('user_type', 'aluno');
+        $alunoPapel = session('papel', session('aluno_papel'));
+        $userId     = session('user_id');
+
+        $isOrientador     = ($role === 'professor' && $userId == $equipe->prof_id);
+        $isTL             = ($role === 'aluno'     && $alunoPapel === 'TL');
+        $canManageColunas = $isOrientador || $isTL;
+
+        if (!$canManageColunas) {
+            return back()->withErrors(['coluna' => 'Acesso negado.']);
+        }
+
+        $coluna = Coluna::where('id', $colunaId)->where('equipe_id', $equipeId)->firstOrFail();
+
+        if (in_array($coluna->titulo, self::COLUNAS_PADRAO)) {
+            return back()->withErrors(['coluna' => 'Não é possível remover colunas padrão.']);
+        }
+
+        // Verificar se possui tarefas em qualquer sprint
+        $colsprintIds = ColSprint::where('coluna_id', $colunaId)->pluck('id');
+        $temTarefas   = TarefaColuna::whereIn('colsprint_id', $colsprintIds)->exists();
+        if ($temTarefas) {
+            return back()->withErrors(['coluna' => 'Não é possível remover uma coluna que ainda possui tarefas. Mova-as primeiro.']);
+        }
+
+        // Remover entradas nas sprints
+        ColSprint::where('coluna_id', $colunaId)->delete();
+        $coluna->delete();
+
+        return back();
+    }
+
+    public function reordenarColunas(Request $request, $equipeId)
+    {
+        $equipe = Equipe::findOrFail($equipeId);
+        $role       = session('user_type', 'aluno');
+        $alunoPapel = session('papel', session('aluno_papel'));
+        $userId     = session('user_id');
+
+        $isOrientador     = ($role === 'professor' && $userId == $equipe->prof_id);
+        $isTL             = ($role === 'aluno'     && $alunoPapel === 'TL');
+        $canManageColunas = $isOrientador || $isTL;
+
+        if (!$canManageColunas) {
+            return back()->withErrors(['coluna' => 'Acesso negado.']);
+        }
+
+        $request->validate([
+            'ordem'           => 'required|array',
+            'ordem.*.id'      => 'required|integer',
+            'ordem.*.titulo'  => 'required|string',
+        ]);
+
+        // Validar restrições de ordem
+        $erro = $this->validarOrdemColunas($request->input('ordem'));
+        if ($erro) {
+            return back()->withErrors(['coluna' => $erro]);
+        }
+
+        DB::transaction(function () use ($request, $equipeId) {
+            foreach ($request->input('ordem') as $index => $item) {
+                Coluna::where('id', $item['id'])
+                    ->where('equipe_id', $equipeId)
+                    ->update(['sequencia' => $index + 1]);
+            }
         });
 
         return back();

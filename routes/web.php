@@ -43,4 +43,9 @@ Route::middleware(['session.auth'])->group(function () {
     Route::post('/kanban/anexo/{tarefaId}', [KanbanController::class, 'adicionarAnexo']);
     Route::delete('/kanban/anexo/{anexoId}', [KanbanController::class, 'deletarAnexo']);
     Route::post('/kanban/encerrar-sprint/{sprintId}', [KanbanController::class, 'encerrarSprint']);
+
+    // Gerenciamento de Colunas (TL / Orientador)
+    Route::post('/equipes/{equipeId}/colunas', [KanbanController::class, 'criarColuna']);
+    Route::post('/equipes/{equipeId}/colunas/reordenar', [KanbanController::class, 'reordenarColunas']);
+    Route::delete('/equipes/{equipeId}/colunas/{colunaId}', [KanbanController::class, 'deletarColuna']);
 });
