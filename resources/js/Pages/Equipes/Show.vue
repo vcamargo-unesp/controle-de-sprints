@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Breadcrumb from '@/Components/Breadcrumb.vue';
@@ -129,80 +129,76 @@ const onDrop = (colunaId) => {
   draggedTaskId.value = null;
 };
 
+// ─── Helpers para sincronizar tarefaSelecionada após updates ───────────────
+const sincronizarTarefaSelecionada = (novasTarefas) => {
+  if (!tarefaSelecionada.value || !modalTarefaAberto.value) return;
+  const atualizada = novasTarefas?.find(t => t.id === tarefaSelecionada.value.id);
+  if (!atualizada) return;
+  // Preserva título e descrição que o usuário pode estar editando
+  const tituloAtual = tarefaSelecionada.value.titulo;
+  const descricaoAtual = tarefaSelecionada.value.descricao;
+  tarefaSelecionada.value = { ...atualizada, titulo: tituloAtual, descricao: descricaoAtual };
+};
+
+// ─── Watchers: sincroniza estado local quando Inertia recarrega props ───────
+watch(() => props.tarefasIniciais, (novas) => {
+  tarefas.value = [...(novas || [])];
+  sincronizarTarefaSelecionada(novas);
+}, { deep: true });
+
+watch(() => props.tarefasBacklog, (novas) => {
+  sincronizarTarefaSelecionada(novas);
+}, { deep: true });
+
+// ─── Polling: simula realtime recarregando só os dados das tarefas ──────────
+const isSyncing = ref(false);
+let pollingTimer = null;
+
+const iniciarPolling = () => {
+  pollingTimer = setInterval(() => {
+    isSyncing.value = true;
+    router.reload({
+      only: ['tarefasIniciais', 'tarefasBacklog'],
+      preserveScroll: true,
+      preserveState: true,
+      onFinish: () => { isSyncing.value = false; }
+    });
+  }, 5000); // a cada 5 segundos
+};
+
+onMounted(() => iniciarPolling());
+onUnmounted(() => { if (pollingTimer) clearInterval(pollingTimer); });
+
+// ─── Abrir modal ────────────────────────────────────────────────────────────
 const abrirModalTarefa = (tarefa) => {
   tarefaSelecionada.value = tarefa;
   modalTarefaAberto.value = true;
 };
 
+// ─── Responsáveis (optimistic) ───────────────────────────────────────────
 const assumirTarefa = (alunoId = null) => {
   if (!tarefaSelecionada.value) return;
-  router.post(`/kanban/assumir-tarefa/${tarefaSelecionada.value.id}`, {
-    aluno_id: alunoId
-  }, {
-    preserveScroll: true,
-    onSuccess: () => {
-      // Atualiza responsaveis localmente no estado para reflexão instantânea
-      const aluno = props.equipe.alunos?.find(a => a.id === alunoId);
-      if (aluno) {
-        const idx = tarefaSelecionada.value.responsaveis.findIndex(r => r.id === aluno.id);
-        if (idx > -1) {
-          tarefaSelecionada.value.responsaveis.splice(idx, 1);
-        } else {
-          tarefaSelecionada.value.responsaveis.push({ id: aluno.id, nome: aluno.nome });
-        }
-      }
-    }
+  // Optimistic: atualiza local imediatamente
+  const aluno = props.equipe.alunos?.find(a => a.id === alunoId);
+  if (aluno) {
+    const idx = tarefaSelecionada.value.responsaveis.findIndex(r => r.id === aluno.id);
+    if (idx > -1) tarefaSelecionada.value.responsaveis.splice(idx, 1);
+    else tarefaSelecionada.value.responsaveis.push({ id: aluno.id, nome: aluno.nome });
+  }
+  router.post(`/kanban/assumir-tarefa/${tarefaSelecionada.value.id}`, { aluno_id: alunoId }, {
+    preserveScroll: true, preserveState: true
   });
 };
 
+// ─── Comentários ─────────────────────────────────────────────────────────
 const enviarComentario = () => {
   if (!novoComentarioText.value || !tarefaSelecionada.value) return;
-  router.post(`/kanban/comentario/${tarefaSelecionada.value.id}`, {
-    texto: novoComentarioText.value
-  }, {
+  const texto = novoComentarioText.value;
+  novoComentarioText.value = ''; // limpa input imediatamente
+  router.post(`/kanban/comentario/${tarefaSelecionada.value.id}`, { texto }, {
     preserveScroll: true,
-    onSuccess: () => {
-      novoComentarioText.value = '';
-    }
-  });
-};
-
-const salvarEdicaoTarefa = () => {
-  if (!tarefaSelecionada.value || !tarefaSelecionada.value.titulo) return;
-  router.post(`/kanban/editar-tarefa/${tarefaSelecionada.value.id}`, {
-    titulo: tarefaSelecionada.value.titulo,
-    descricao: tarefaSelecionada.value.descricao
-  }, {
-    preserveScroll: true,
-    preserveState: true,
-    onSuccess: () => {
-      // Atualizar também na lista local de tarefas (Kanban ou Backlog)
-      const t = tarefas.value.find(item => item.id === tarefaSelecionada.value.id);
-      if (t) {
-        t.titulo = tarefaSelecionada.value.titulo;
-        t.descricao = tarefaSelecionada.value.descricao;
-      }
-      const tb = props.tarefasBacklog?.find(item => item.id === tarefaSelecionada.value.id);
-      if (tb) {
-        tb.titulo = tarefaSelecionada.value.titulo;
-        tb.descricao = tarefaSelecionada.value.descricao;
-      }
-    }
-  });
-};
-
-const enviarAnexo = (event) => {
-  const file = event.target.files[0];
-  if (!file || !tarefaSelecionada.value) return;
-
-  const formData = new FormData();
-  formData.append('arquivo', file);
-
-  router.post(`/kanban/anexo/${tarefaSelecionada.value.id}`, formData, {
-    preserveScroll: true,
-    onSuccess: () => {
-      if (arquivoAnexoInput.value) arquivoAnexoInput.value.value = '';
-    }
+    preserveState: true
+    // O watch no props.tarefasIniciais/Backlog vai sincronizar o novo comentário
   });
 };
 
@@ -213,14 +209,14 @@ const iniciarEdicaoComentario = (c) => {
 
 const salvarEdicaoComentario = (c) => {
   if (!comentarioEmEdicaoTexto.value) return;
-  router.post(`/kanban/comentario/${c.id}/editar`, {
-    texto: comentarioEmEdicaoTexto.value
-  }, {
-    preserveScroll: true,
-    onSuccess: () => {
-      comentarioEmEdicaoId.value = null;
-      comentarioEmEdicaoTexto.value = '';
-    }
+  const novoTexto = comentarioEmEdicaoTexto.value;
+  // Optimistic: atualiza o texto localmente agora
+  const comentario = tarefaSelecionada.value.comentarios.find(item => item.id === c.id);
+  if (comentario) comentario.texto = novoTexto;
+  comentarioEmEdicaoId.value = null;
+  comentarioEmEdicaoTexto.value = '';
+  router.post(`/kanban/comentario/${c.id}/editar`, { texto: novoTexto }, {
+    preserveScroll: true, preserveState: true
   });
 };
 
@@ -231,25 +227,60 @@ const cancelarEdicaoComentario = () => {
 
 const deletarComentario = (c) => {
   if (!confirm('Deseja realmente apagar este comentário?')) return;
-  router.delete(`/kanban/comentario/${c.id}`, {}, {
-    preserveScroll: true
+  // Optimistic: remove da lista local imediatamente
+  const idx = tarefaSelecionada.value.comentarios.findIndex(item => item.id === c.id);
+  if (idx > -1) tarefaSelecionada.value.comentarios.splice(idx, 1);
+  // Também atualiza no array tarefas (card do kanban)
+  const t = tarefas.value.find(item => item.id === tarefaSelecionada.value.id);
+  if (t) { const ti = t.comentarios.findIndex(item => item.id === c.id); if (ti > -1) t.comentarios.splice(ti, 1); }
+  router.delete(`/kanban/comentario/${c.id}`, {}, { preserveScroll: true, preserveState: true });
+};
+
+// ─── Anexos ───────────────────────────────────────────────────────────────
+const enviarAnexo = (event) => {
+  const file = event.target.files[0];
+  if (!file || !tarefaSelecionada.value) return;
+  const formData = new FormData();
+  formData.append('arquivo', file);
+  router.post(`/kanban/anexo/${tarefaSelecionada.value.id}`, formData, {
+    preserveScroll: true,
+    preserveState: true,
+    onSuccess: () => { if (arquivoAnexoInput.value) arquivoAnexoInput.value.value = ''; }
   });
 };
 
 const deletarAnexo = (a) => {
   if (!confirm(`Deseja remover o anexo "${a.nome_original}"?`)) return;
-  router.delete(`/kanban/anexo/${a.id}`, {}, {
-    preserveScroll: true
+  // Optimistic: remove da lista local imediatamente
+  const idx = tarefaSelecionada.value.anexos.findIndex(item => item.id === a.id);
+  if (idx > -1) tarefaSelecionada.value.anexos.splice(idx, 1);
+  // Também atualiza no array tarefas (card do kanban)
+  const t = tarefas.value.find(item => item.id === tarefaSelecionada.value.id);
+  if (t) { const ti = t.anexos.findIndex(item => item.id === a.id); if (ti > -1) t.anexos.splice(ti, 1); }
+  router.delete(`/kanban/anexo/${a.id}`, {}, { preserveScroll: true, preserveState: true });
+};
+
+// ─── Tarefa (título/descrição) ─────────────────────────────────────────
+const salvarEdicaoTarefa = () => {
+  if (!tarefaSelecionada.value || !tarefaSelecionada.value.titulo) return;
+  router.post(`/kanban/editar-tarefa/${tarefaSelecionada.value.id}`, {
+    titulo: tarefaSelecionada.value.titulo,
+    descricao: tarefaSelecionada.value.descricao
+  }, {
+    preserveScroll: true,
+    preserveState: true,
+    onSuccess: () => {
+      const t = tarefas.value.find(item => item.id === tarefaSelecionada.value.id);
+      if (t) { t.titulo = tarefaSelecionada.value.titulo; t.descricao = tarefaSelecionada.value.descricao; }
+    }
   });
 };
 
+// ─── Backlog / Sprint ─────────────────────────────────────────────────
 const alternarSelecaoBacklog = (id) => {
   const index = tarefasSelecionadasBacklog.value.indexOf(id);
-  if (index > -1) {
-    tarefasSelecionadasBacklog.value.splice(index, 1);
-  } else {
-    tarefasSelecionadasBacklog.value.push(id);
-  }
+  if (index > -1) tarefasSelecionadasBacklog.value.splice(index, 1);
+  else tarefasSelecionadasBacklog.value.push(id);
 };
 
 const criarTarefaBacklog = () => {
@@ -268,18 +299,13 @@ const criarTarefaBacklog = () => {
 
 const iniciarNovaSprint = () => {
   if (tarefasSelecionadasBacklog.value.length === 0) return;
-
-  // Se é a primeira sprint, perguntar o número correto
   const ehPrimeiraSprint = !props.sprintsAnteriores || props.sprintsAnteriores.length === 0;
   if (ehPrimeiraSprint) {
     sequenciaInicialSprint.value = 1;
     modalInicioSprintAberto.value = true;
     return;
   }
-
-  router.post(`/equipes/${props.equipe.id}/iniciar-sprint`, {
-    tarefas_ids: tarefasSelecionadasBacklog.value
-  });
+  router.post(`/equipes/${props.equipe.id}/iniciar-sprint`, { tarefas_ids: tarefasSelecionadasBacklog.value });
 };
 
 const confirmarInicioSprint = () => {
@@ -292,12 +318,8 @@ const confirmarInicioSprint = () => {
 
 const confirmarEncerramento = () => {
   if (!props.sprint) return;
-  router.post(`/kanban/encerrar-sprint/${props.sprint.id}`, {
-    feedback: feedbackProfessorInput.value
-  }, {
-    onSuccess: () => {
-      modalEncerramentoAberto.value = false;
-    }
+  router.post(`/kanban/encerrar-sprint/${props.sprint.id}`, { feedback: feedbackProfessorInput.value }, {
+    onSuccess: () => { modalEncerramentoAberto.value = false; }
   });
 };
 </script>
@@ -389,9 +411,23 @@ const confirmarEncerramento = () => {
       </div>
     </div>
 
+    <!-- Indicador de Sincronização em Tempo Real -->
+    <div class="flex items-center justify-end mb-2 pr-0.5">
+      <div class="flex items-center space-x-1.5 text-[10px] font-semibold text-slate-400">
+        <span
+          :class="[
+            'w-2 h-2 rounded-full transition-colors duration-500',
+            isSyncing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+          ]"
+        ></span>
+        <span>{{ isSyncing ? 'Sincronizando...' : 'Atualização automática ativa' }}</span>
+      </div>
+    </div>
+
     <!-- Conteúdo por Abas -->
 
     <!-- ABA 1: BACKLOG -->
+
     <div v-if="abaAtiva === 'backlog'" class="bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden">
       <div class="bg-slate-50 border-b border-slate-200 p-3 flex flex-wrap items-center justify-between gap-2">
         <div>
