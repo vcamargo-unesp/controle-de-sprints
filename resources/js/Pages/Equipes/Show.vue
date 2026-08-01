@@ -322,6 +322,13 @@ const confirmarEncerramento = () => {
     onSuccess: () => { modalEncerramentoAberto.value = false; }
   });
 };
+
+// Helper: parseia JSON dos detalhes do histórico com segurança
+const parseDetalhes = (detalhes) => {
+  if (!detalhes) return null;
+  try { return typeof detalhes === 'string' ? JSON.parse(detalhes) : detalhes; }
+  catch { return null; }
+};
 </script>
 
 <template>
@@ -876,9 +883,12 @@ const confirmarEncerramento = () => {
                 :class="[
                   'absolute -left-[23px] top-0.5 w-3 h-3 rounded-full border-2 bg-white',
                   h.tipo_acao === 'transferencia_sprint' ? 'border-amber-500 bg-amber-100' :
-                  h.tipo_acao === 'movimentacao' ? 'border-blue-500 bg-blue-100' :
-                  h.tipo_acao === 'edicao' ? 'border-purple-500 bg-purple-100' :
-                  h.tipo_acao === 'responsavel' ? 'border-emerald-500 bg-emerald-100' : 'border-slate-500'
+                  h.tipo_acao === 'movimentacao'         ? 'border-blue-500 bg-blue-100' :
+                  h.tipo_acao === 'edicao'               ? 'border-purple-500 bg-purple-100' :
+                  h.tipo_acao === 'responsavel'          ? 'border-emerald-500 bg-emerald-100' :
+                  h.tipo_acao === 'comentario'           ? 'border-pink-500 bg-pink-100' :
+                  h.tipo_acao === 'anexo'                ? 'border-orange-500 bg-orange-100' :
+                  'border-slate-500'
                 ]"
               ></div>
 
@@ -899,6 +909,32 @@ const confirmarEncerramento = () => {
                 </div>
 
                 <p class="text-xs font-medium text-slate-800 leading-snug">{{ h.descricao }}</p>
+
+                <!-- Detalhes expandidos: antes/depois (edição) ou texto apagado (deleção) -->
+                <template v-if="parseDetalhes(h.detalhes)">
+                  <div class="mt-1.5 space-y-1">
+                    <!-- Edição de comentário: antes e depois -->
+                    <template v-if="parseDetalhes(h.detalhes).antes !== undefined">
+                      <div class="bg-red-50 border border-red-200 rounded px-2 py-1">
+                        <span class="text-[9px] font-extrabold uppercase text-red-600 block mb-0.5">Antes</span>
+                        <p class="text-[11px] text-red-800 leading-snug italic">{{ parseDetalhes(h.detalhes).antes }}</p>
+                      </div>
+                      <div class="bg-emerald-50 border border-emerald-200 rounded px-2 py-1">
+                        <span class="text-[9px] font-extrabold uppercase text-emerald-600 block mb-0.5">Depois</span>
+                        <p class="text-[11px] text-emerald-800 leading-snug">{{ parseDetalhes(h.detalhes).depois }}</p>
+                      </div>
+                    </template>
+                    <!-- Deleção de comentário: texto apagado -->
+                    <template v-else-if="parseDetalhes(h.detalhes).texto_apagado !== undefined">
+                      <div class="bg-slate-100 border border-slate-300 rounded px-2 py-1">
+                        <span class="text-[9px] font-extrabold uppercase text-slate-500 block mb-0.5 flex items-center space-x-1">
+                          <Trash2 class="w-2.5 h-2.5" /><span>Texto apagado</span>
+                        </span>
+                        <p class="text-[11px] text-slate-600 leading-snug italic line-through">{{ parseDetalhes(h.detalhes).texto_apagado }}</p>
+                      </div>
+                    </template>
+                  </div>
+                </template>
 
                 <div class="mt-1 text-[10px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-1">
                   <span>Autor: <strong class="text-slate-700">{{ h.autor_nome }}</strong></span>

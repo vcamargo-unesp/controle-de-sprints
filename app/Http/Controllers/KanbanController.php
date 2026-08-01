@@ -357,7 +357,20 @@ class KanbanController extends Controller
             return back()->withErrors(['comentario' => 'Você só pode editar seus próprios comentários.']);
         }
 
-        $comentario->update(['texto' => $request->input('texto')]);
+        $textoAnterior = $comentario->texto;
+        $textoNovo     = $request->input('texto');
+
+        $comentario->update(['texto' => $textoNovo]);
+
+        $this->registrarHistorico(
+            $comentario->tarefa_id,
+            'comentario',
+            "Comentário editado pelo autor.",
+            json_encode([
+                'antes' => $textoAnterior,
+                'depois' => $textoNovo,
+            ], JSON_UNESCAPED_UNICODE)
+        );
 
         return back();
     }
@@ -377,7 +390,19 @@ class KanbanController extends Controller
             return back()->withErrors(['comentario' => 'Você só pode deletar seus próprios comentários.']);
         }
 
+        $tarefaId    = $comentario->tarefa_id;
+        $textoApagado = $comentario->texto;
+
         $comentario->delete();
+
+        $this->registrarHistorico(
+            $tarefaId,
+            'comentario',
+            "Comentário removido pelo autor.",
+            json_encode([
+                'texto_apagado' => $textoApagado,
+            ], JSON_UNESCAPED_UNICODE)
+        );
 
         return back();
     }
@@ -397,9 +422,18 @@ class KanbanController extends Controller
             return back()->withErrors(['anexo' => 'Você só pode deletar seus próprios anexos.']);
         }
 
+        $tarefaId    = $anexo->tarefa_id;
+        $nomeArquivo = $anexo->nome_original;
+
         // Remover arquivo do storage
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($anexo->caminho);
+        Storage::disk('public')->delete($anexo->caminho);
         $anexo->delete();
+
+        $this->registrarHistorico(
+            $tarefaId,
+            'anexo',
+            "Anexo removido pelo autor: '{$nomeArquivo}'."
+        );
 
         return back();
     }
