@@ -104,6 +104,12 @@ class KanbanController extends Controller
             ];
         };
 
+        // Busca a última sprint encerrada da equipe para verificar quais tarefas pertenciam a ela
+        $ultimaSprintEncerrada = Sprint::where('equipe_id', $equipeId)
+            ->where('encerrada', true)
+            ->orderBy('sequencia', 'desc')
+            ->first();
+
         // 1. Aba Backlog
         $tarefasBacklogRaw = Tarefa::with([
             'responsaveis', 'comentarios.aluno', 'comentarios.professor',
@@ -115,7 +121,27 @@ class KanbanController extends Controller
         })
         ->get();
 
-        $tarefasBacklog = $tarefasBacklogRaw->map(fn($t) => $formatarTarefa($t));
+        $tarefasBacklog = $tarefasBacklogRaw->map(function($t) use ($formatarTarefa, $ultimaSprintEncerrada) {
+            $formatted = $formatarTarefa($t);
+            $veioDaSprintAnterior = false;
+            $sprintAnteriorNumero = null;
+
+            if ($ultimaSprintEncerrada) {
+                $historicoTransferencia = $t->historicos->first(function($h) use ($ultimaSprintEncerrada) {
+                    return $h->tipo_acao === 'transferencia_sprint' 
+                        && str_contains($h->descricao, "Sprint {$ultimaSprintEncerrada->sequencia}");
+                });
+
+                if ($historicoTransferencia) {
+                    $veioDaSprintAnterior = true;
+                    $sprintAnteriorNumero = $ultimaSprintEncerrada->sequencia;
+                }
+            }
+
+            $formatted['veio_da_sprint_anterior'] = $veioDaSprintAnterior;
+            $formatted['sprint_anterior_numero'] = $sprintAnteriorNumero;
+            return $formatted;
+        });
 
         // 2. Sprint Atual
         $sprintIdQuery = $request->query('sprint_id');
@@ -504,7 +530,7 @@ class KanbanController extends Controller
                 'encerrada' => false
             ]);
 
-            $colunas = Coluna::where('equipe_id', $equipeId)->get();
+            $colunas = Coluna::where('equipe_id', $equipeId)->orderBy('sequencia')->get();
             if ($colunas->isEmpty()) {
                 $c1 = Coluna::create(['titulo' => 'A FAZER', 'sequencia' => 1, 'equipe_id' => $equipeId, 'concluido' => false]);
                 $c2 = Coluna::create(['titulo' => 'FAZENDO', 'sequencia' => 2, 'equipe_id' => $equipeId, 'concluido' => false]);
@@ -514,9 +540,17 @@ class KanbanController extends Controller
             }
 
             $primeiroColSprintId = null;
-            foreach ($colunas as $index => $col) {
+            foreach ($colunas as $col) {
                 $cs = ColSprint::create(['coluna_id' => $col->id, 'sprint_id' => $novaSprint->id]);
-                if ($index === 0) $primeiroColSprintId = $cs->id;
+                if ($col->titulo === 'A FAZER' || ($primeiroColSprintId === null && $col->sequencia == 1)) {
+                    $primeiroColSprintId = $cs->id;
+                }
+            }
+
+            // Fallback caso a coluna 'A FAZER' por algum motivo não tenha sido mapeada
+            if (!$primeiroColSprintId && $colunas->isNotEmpty()) {
+                $primeiraCol = ColSprint::where('sprint_id', $novaSprint->id)->first();
+                $primeiroColSprintId = $primeiraCol ? $primeiraCol->id : null;
             }
 
             foreach ($tarefasIds as $tId) {

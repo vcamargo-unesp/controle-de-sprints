@@ -165,13 +165,13 @@ const confirmarEncerramento = () => {
 
       <!-- Fase 5: Modal do Professor - Rito de Encerramento -->
       <div v-if="userRole === 'professor'" class="flex items-center space-x-2">
-        <button 
-          @click="modalEncerramentoAberto = true"
-          class="bg-[#9B2C2C] hover:bg-[#7B1D1D] text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"
-        >
-          <CheckCircle2 class="w-4 h-4" />
-          <span>Encerrar Sprint & Repassar Pendências</span>
-        </button>
+          <button 
+            @click="modalEncerramentoAberto = true"
+            class="bg-[#9B2C2C] hover:bg-[#7B1D1D] text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"
+          >
+            <CheckCircle2 class="w-4 h-4" />
+            <span>Encerrar Sprint</span>
+          </button>
       </div>
     </div>
 

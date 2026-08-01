@@ -151,7 +151,15 @@ watch(() => props.tarefasIniciais, (novas) => {
 
 watch(() => props.tarefasBacklog, (novas) => {
   sincronizarTarefaSelecionada(novas);
-}, { deep: true });
+  if (novas && novas.length > 0) {
+    // Pré-seleciona APENAS as tarefas que vieram da sprint encerrada imediatamente anterior
+    tarefasSelecionadasBacklog.value = novas
+      .filter(t => t.veio_da_sprint_anterior)
+      .map(t => t.id);
+  } else {
+    tarefasSelecionadasBacklog.value = [];
+  }
+}, { deep: true, immediate: true });
 
 // ─── Polling: simula realtime recarregando só os dados das tarefas ──────────
 const isSyncing = ref(false);
@@ -416,7 +424,10 @@ const confirmarInicioSprint = () => {
 const confirmarEncerramento = () => {
   if (!props.sprint) return;
   router.post(`/kanban/encerrar-sprint/${props.sprint.id}`, { feedback: feedbackProfessorInput.value }, {
-    onSuccess: () => { modalEncerramentoAberto.value = false; }
+    onSuccess: () => { 
+      modalEncerramentoAberto.value = false;
+      router.get(`/equipes/${props.equipe.id}?aba=backlog`);
+    }
   });
 };
 
@@ -580,12 +591,25 @@ const parseDetalhes = (detalhes) => {
                 <input 
                   type="checkbox" 
                   :value="t.id" 
+                  :checked="tarefasSelecionadasBacklog.includes(t.id)"
                   @change="alternarSelecaoBacklog(t.id)"
-                  class="rounded border-slate-300 text-[#0F2537]"
+                  class="rounded border-slate-300 text-[#0F2537] focus:ring-[#0F2537] cursor-pointer"
                 />
               </td>
               <td class="font-mono font-bold text-slate-600">#{{ t.id }}</td>
-              <td class="font-bold text-slate-900">{{ t.titulo }}</td>
+              <td class="font-bold text-slate-900">
+                <div class="flex items-center space-x-2">
+                  <span>{{ t.titulo }}</span>
+                  <span 
+                    v-if="t.veio_da_sprint_anterior" 
+                    class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center space-x-1"
+                    title="Tarefa não concluída devolvida da Sprint anterior"
+                  >
+                    <History class="w-3 h-3 text-amber-700" />
+                    <span>Pendente da Sprint {{ t.sprint_anterior_numero }}</span>
+                  </span>
+                </div>
+              </td>
               <td class="text-slate-600">{{ t.descricao || 'Sem descrição' }}</td>
             </tr>
             <tr v-if="!tarefasBacklog || tarefasBacklog.length === 0">
@@ -625,7 +649,7 @@ const parseDetalhes = (detalhes) => {
             class="bg-[#9B2C2C] hover:bg-[#7B1D1D] text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"
           >
             <CheckCircle2 class="w-4 h-4" />
-            <span>Encerrar Sprint e Avaliar</span>
+            <span>Encerrar Sprint</span>
           </button>
         </div>
         <!-- Botão gerenciar colunas para TL (sem ser orientador) -->
@@ -1077,7 +1101,7 @@ const parseDetalhes = (detalhes) => {
     <div v-if="modalEncerramentoAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
         <div class="bg-[#9B2C2C] px-4 py-3 text-white flex items-center justify-between">
-          <h3 class="text-sm font-bold">Rito de Encerramento e Avaliação</h3>
+          <h3 class="text-sm font-bold">Encerrar Sprint & Avaliação</h3>
           <button @click="modalEncerramentoAberto = false" class="text-white cursor-pointer">
             <X class="w-5 h-5" />
           </button>
@@ -1085,7 +1109,7 @@ const parseDetalhes = (detalhes) => {
 
         <div class="p-4 space-y-3">
           <p class="text-xs text-slate-600">
-            Confirme os resultados da <strong>{{ sprint?.nome }}</strong>. A Sprint será movida para as "Sprints Anteriores" em modo leitura e as tarefas pendentes serão repassadas ao Backlog.
+            Ao encerrar a <strong>{{ sprint?.nome }}</strong>, os resultados atuais serão congelados nas Sprints Anteriores e o parecer/feedback será registrado. As tarefas pendentes voltarão para o Backlog para serem atribuídas à próxima Sprint.
           </p>
 
           <div class="bg-slate-50 p-3 rounded border border-slate-200">
