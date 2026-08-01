@@ -163,7 +163,11 @@ class KanbanController extends Controller
 
             $colunasSprint = ColSprint::with('coluna')
                 ->where('sprint_id', $sprint->id)
-                ->get();
+                ->get()
+                ->sortBy(function ($cs) {
+                    return $cs->coluna ? $cs->coluna->sequencia : 999;
+                })
+                ->values();
 
             $tarefasColuna = TarefaColuna::with([
                 'tarefa.responsaveis', 
