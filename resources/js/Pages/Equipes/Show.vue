@@ -579,7 +579,6 @@ const parseDetalhes = (detalhes) => {
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="text-[10px] font-mono font-bold text-slate-500">#{{ tarefa.id }}</span>
-                <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border bg-blue-50 text-blue-800 border-blue-300">Dev</span>
               </div>
               <h4 class="text-xs font-semibold text-slate-900 leading-tight mb-2">{{ tarefa.titulo }}</h4>
               
