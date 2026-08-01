@@ -13,6 +13,7 @@ use App\Models\Anexo;
 use App\Models\Equipe;
 use App\Models\HistoricoTarefa;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class KanbanController extends Controller
@@ -63,7 +64,9 @@ class KanbanController extends Controller
                         'texto' => $c->texto,
                         'autor_nome' => $c->prof_id ? ($c->professor?->nome ?? 'Professor') : ($c->aluno?->nome ?? 'Aluno'),
                         'is_professor' => !is_null($c->prof_id),
-                        'is_orientador' => !is_null($c->prof_id) && $c->prof_id == $equipe->prof_id
+                        'is_orientador' => !is_null($c->prof_id) && $c->prof_id == $equipe->prof_id,
+                        'aluno_id' => $c->aluno_id,
+                        'prof_id' => $c->prof_id,
                     ];
                 }),
                 'anexos' => $tarefa->anexos->map(function($a) use ($equipe) {
@@ -73,7 +76,9 @@ class KanbanController extends Controller
                         'nome_original' => $a->nome_original ?? 'Arquivo',
                         'autor_nome' => $a->prof_id ? ($a->professor?->nome ?? 'Professor') : ($a->aluno?->nome ?? 'Aluno'),
                         'is_professor' => !is_null($a->prof_id),
-                        'is_orientador' => !is_null($a->prof_id) && $a->prof_id == $equipe->prof_id
+                        'is_orientador' => !is_null($a->prof_id) && $a->prof_id == $equipe->prof_id,
+                        'aluno_id' => $a->aluno_id,
+                        'prof_id' => $a->prof_id,
                     ];
                 }),
                 'historicos' => $tarefa->historicos->map(function($h) use ($equipe) {
@@ -164,6 +169,7 @@ class KanbanController extends Controller
             'equipe' => $equipe,
             'abaAtiva' => $aba,
             'userRole' => $role,
+            'userId' => $userId,
             'isOrientador' => $isOrientador,
             'isPO' => ($role === 'aluno' && $alunoPapel === 'PO') || $isOrientador,
             'sprint' => $sprint ? [
@@ -330,6 +336,70 @@ class KanbanController extends Controller
             'anexo',
             "Novo arquivo anexado: '{$nomeOriginal}'."
         );
+
+        return back();
+    }
+
+    public function editarComentario(Request $request, $comentarioId)
+    {
+        $request->validate(['texto' => 'required|string']);
+
+        $role = session('user_type', 'aluno');
+        $userId = session('user_id');
+
+        $comentario = Comentario::findOrFail($comentarioId);
+
+        // Verificar autoria
+        if ($role === 'aluno' && $comentario->aluno_id != $userId) {
+            return back()->withErrors(['comentario' => 'Você só pode editar seus próprios comentários.']);
+        }
+        if ($role === 'professor' && $comentario->prof_id != $userId) {
+            return back()->withErrors(['comentario' => 'Você só pode editar seus próprios comentários.']);
+        }
+
+        $comentario->update(['texto' => $request->input('texto')]);
+
+        return back();
+    }
+
+    public function deletarComentario(Request $request, $comentarioId)
+    {
+        $role = session('user_type', 'aluno');
+        $userId = session('user_id');
+
+        $comentario = Comentario::findOrFail($comentarioId);
+
+        // Verificar autoria
+        if ($role === 'aluno' && $comentario->aluno_id != $userId) {
+            return back()->withErrors(['comentario' => 'Você só pode deletar seus próprios comentários.']);
+        }
+        if ($role === 'professor' && $comentario->prof_id != $userId) {
+            return back()->withErrors(['comentario' => 'Você só pode deletar seus próprios comentários.']);
+        }
+
+        $comentario->delete();
+
+        return back();
+    }
+
+    public function deletarAnexo(Request $request, $anexoId)
+    {
+        $role = session('user_type', 'aluno');
+        $userId = session('user_id');
+
+        $anexo = Anexo::findOrFail($anexoId);
+
+        // Verificar autoria
+        if ($role === 'aluno' && $anexo->aluno_id != $userId) {
+            return back()->withErrors(['anexo' => 'Você só pode deletar seus próprios anexos.']);
+        }
+        if ($role === 'professor' && $anexo->prof_id != $userId) {
+            return back()->withErrors(['anexo' => 'Você só pode deletar seus próprios anexos.']);
+        }
+
+        // Remover arquivo do storage
+        \Illuminate\Support\Facades\Storage::disk('public')->delete($anexo->caminho);
+        $anexo->delete();
 
         return back();
     }

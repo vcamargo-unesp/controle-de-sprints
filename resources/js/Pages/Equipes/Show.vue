@@ -23,13 +23,18 @@ import {
   UserPlus,
   Users,
   GitCommit,
-  FileText
+  FileText,
+  Github,
+  Globe,
+  Pencil,
+  Trash2
 } from 'lucide-vue-next';
 
 const props = defineProps({
   equipe: Object,
   abaAtiva: String,
   userRole: String,
+  userId: Number,
   isOrientador: Boolean,
   isPO: Boolean,
   sprint: Object,
@@ -64,6 +69,24 @@ const sequenciaInicialSprint = ref(1);
 // Form de Comentário e Anexo no Modal
 const novoComentarioText = ref('');
 const arquivoAnexoInput = ref(null);
+
+// Edição de comentário inline
+const comentarioEmEdicaoId = ref(null);
+const comentarioEmEdicaoTexto = ref('');
+
+// Helper: verifica se o usuário logado é o autor do comentário
+const isAutorComentario = (c) => {
+  if (props.userRole === 'aluno') return c.aluno_id === props.userId;
+  if (props.userRole === 'professor') return c.prof_id === props.userId;
+  return false;
+};
+
+// Helper: verifica se o usuário logado é o autor do anexo
+const isAutorAnexo = (a) => {
+  if (props.userRole === 'aluno') return a.aluno_id === props.userId;
+  if (props.userRole === 'professor') return a.prof_id === props.userId;
+  return false;
+};
 
 // Drag & Drop
 const draggedTaskId = ref(null);
@@ -183,6 +206,43 @@ const enviarAnexo = (event) => {
   });
 };
 
+const iniciarEdicaoComentario = (c) => {
+  comentarioEmEdicaoId.value = c.id;
+  comentarioEmEdicaoTexto.value = c.texto;
+};
+
+const salvarEdicaoComentario = (c) => {
+  if (!comentarioEmEdicaoTexto.value) return;
+  router.post(`/kanban/comentario/${c.id}/editar`, {
+    texto: comentarioEmEdicaoTexto.value
+  }, {
+    preserveScroll: true,
+    onSuccess: () => {
+      comentarioEmEdicaoId.value = null;
+      comentarioEmEdicaoTexto.value = '';
+    }
+  });
+};
+
+const cancelarEdicaoComentario = () => {
+  comentarioEmEdicaoId.value = null;
+  comentarioEmEdicaoTexto.value = '';
+};
+
+const deletarComentario = (c) => {
+  if (!confirm('Deseja realmente apagar este comentário?')) return;
+  router.delete(`/kanban/comentario/${c.id}`, {}, {
+    preserveScroll: true
+  });
+};
+
+const deletarAnexo = (a) => {
+  if (!confirm(`Deseja remover o anexo "${a.nome_original}"?`)) return;
+  router.delete(`/kanban/anexo/${a.id}`, {}, {
+    preserveScroll: true
+  });
+};
+
 const alternarSelecaoBacklog = (id) => {
   const index = tarefasSelecionadasBacklog.value.indexOf(id);
   if (index > -1) {
@@ -258,7 +318,7 @@ const confirmarEncerramento = () => {
             {{ equipe.ano || 2026 }}
           </span>
         </div>
-        <div class="flex items-center space-x-2 mt-1">
+        <div class="flex items-center flex-wrap gap-2 mt-1">
           <p class="text-xs text-slate-500">{{ equipe.descricao || 'Projeto de Engenharia de Software CTI' }}</p>
           <button 
             @click="modalIntegrantesAberto = true" 
@@ -267,6 +327,28 @@ const confirmarEncerramento = () => {
             <Users class="w-3.5 h-3.5 text-slate-600" />
             <span>Ver {{ equipe.alunos?.length || 0 }} Integrante(s)</span>
           </button>
+          <!-- Botão GitHub -->
+          <a
+            v-if="equipe.github"
+            :href="equipe.github"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center space-x-1 text-[11px] font-bold text-slate-800 bg-slate-900 hover:bg-slate-700 text-white px-2 py-0.5 rounded border border-slate-700 transition"
+          >
+            <Github class="w-3.5 h-3.5" />
+            <span>GitHub</span>
+          </a>
+          <!-- Botão Site -->
+          <a
+            v-if="equipe.url"
+            :href="equipe.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-400 transition"
+          >
+            <Globe class="w-3.5 h-3.5" />
+            <span>Site do Projeto</span>
+          </a>
         </div>
       </div>
 
@@ -609,8 +691,44 @@ const confirmarEncerramento = () => {
                   <span :class="c.is_professor ? 'text-amber-900' : 'text-slate-600'">
                     {{ c.autor_nome }} {{ c.is_professor ? '(Orientação do Professor)' : '' }}
                   </span>
+                  <!-- Ações do autor -->
+                  <div v-if="isAutorComentario(c)" class="flex items-center space-x-1">
+                    <button
+                      @click="iniciarEdicaoComentario(c)"
+                      class="text-slate-400 hover:text-blue-600 transition cursor-pointer"
+                      title="Editar comentário"
+                    >
+                      <Pencil class="w-3 h-3" />
+                    </button>
+                    <button
+                      @click="deletarComentario(c)"
+                      class="text-slate-400 hover:text-red-600 transition cursor-pointer"
+                      title="Apagar comentário"
+                    >
+                      <Trash2 class="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-                <p>{{ c.texto }}</p>
+                <!-- Modo visualização -->
+                <p v-if="comentarioEmEdicaoId !== c.id">{{ c.texto }}</p>
+                <!-- Modo edição inline -->
+                <div v-else class="mt-1 space-y-1">
+                  <textarea
+                    v-model="comentarioEmEdicaoTexto"
+                    rows="2"
+                    class="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  ></textarea>
+                  <div class="flex gap-1">
+                    <button
+                      @click="salvarEdicaoComentario(c)"
+                      class="text-[10px] bg-[#0F2537] text-white px-2 py-0.5 rounded font-semibold cursor-pointer hover:bg-[#1A365D]"
+                    >Salvar</button>
+                    <button
+                      @click="cancelarEdicaoComentario"
+                      class="text-[10px] border border-slate-300 text-slate-600 px-2 py-0.5 rounded cursor-pointer hover:bg-slate-100"
+                    >Cancelar</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -639,8 +757,18 @@ const confirmarEncerramento = () => {
 
             <div class="space-y-1">
               <div v-for="a in tarefaSelecionada?.anexos" :key="a.id" class="text-xs flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-200">
-                <span class="font-medium text-slate-800 truncate max-w-[250px]">{{ a.nome_original }}</span>
-                <span class="text-[10px] text-slate-500">Enviado por: {{ a.autor_nome }}</span>
+                <span class="font-medium text-slate-800 truncate max-w-[200px]">{{ a.nome_original }}</span>
+                <div class="flex items-center space-x-2">
+                  <span class="text-[10px] text-slate-500">{{ a.autor_nome }}</span>
+                  <button
+                    v-if="isAutorAnexo(a)"
+                    @click="deletarAnexo(a)"
+                    class="text-slate-400 hover:text-red-600 transition cursor-pointer"
+                    title="Remover anexo"
+                  >
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
