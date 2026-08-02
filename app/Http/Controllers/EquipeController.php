@@ -27,6 +27,7 @@ class EquipeController extends Controller
 
         $equipes = Equipe::with(['professor', 'sprints', 'alunos'])
             ->orderBy('ano', 'desc')
+            ->orderBy('turma', 'asc')
             ->orderBy('nome', 'asc')
             ->get()
             ->map(function ($e) {
@@ -34,7 +35,7 @@ class EquipeController extends Controller
                 return [
                     'id' => $e->id,
                     'ano' => $e->ano ?? date('Y'),
-                    'turma' => '3º Info',
+                    'turma' => $e->turma ?? '3A',
                     'nome' => $e->nome,
                     'descricao' => $e->descricao,
                     'url' => $e->url,
@@ -67,6 +68,7 @@ class EquipeController extends Controller
             'nome' => 'required|string|max:255',
             'descricao' => 'nullable|string',
             'ano' => 'required|integer',
+            'turma' => 'required|string|max:100',
             'url' => 'nullable|url',
             'github' => 'nullable|url',
             'prof_id' => 'required|exists:professores,id'
@@ -76,6 +78,7 @@ class EquipeController extends Controller
             'nome' => $request->input('nome'),
             'descricao' => $request->input('descricao'),
             'ano' => $request->input('ano'),
+            'turma' => $request->input('turma'),
             'url' => $request->input('url'),
             'github' => $request->input('github'),
             'prof_id' => $request->input('prof_id')
@@ -85,7 +88,7 @@ class EquipeController extends Controller
     }
 
     /**
-     * Atualizar dados da equipe no banco (Nome, Descrição, Ano, URL, GitHub, Orientador)
+     * Atualizar dados da equipe no banco (Nome, Descrição, Ano, Turma, URL, GitHub, Orientador)
      */
     public function update(Request $request, $id)
     {
@@ -99,6 +102,7 @@ class EquipeController extends Controller
             'nome' => 'required|string|max:255',
             'descricao' => 'nullable|string',
             'ano' => 'required|integer',
+            'turma' => 'required|string|max:100',
             'url' => 'nullable|url',
             'github' => 'nullable|url',
             'prof_id' => 'required|exists:professores,id'
@@ -108,6 +112,7 @@ class EquipeController extends Controller
             'nome' => $request->input('nome'),
             'descricao' => $request->input('descricao'),
             'ano' => $request->input('ano'),
+            'turma' => $request->input('turma'),
             'url' => $request->input('url'),
             'github' => $request->input('github'),
             'prof_id' => $request->input('prof_id')

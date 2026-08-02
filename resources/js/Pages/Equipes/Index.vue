@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Breadcrumb from '@/Components/Breadcrumb.vue';
@@ -14,7 +14,8 @@ import {
   ExternalLink, 
   Github, 
   UserCheck,
-  Pencil
+  Pencil,
+  Filter
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -35,6 +36,7 @@ const modalNovaEquipeAberto = ref(false);
 const novaEquipeNome = ref('');
 const novaEquipeDescricao = ref('');
 const novaEquipeAno = ref(new Date().getFullYear());
+const novaEquipeTurma = ref('3A');
 const novaEquipeUrl = ref('');
 const novaEquipeGithub = ref('');
 const novaEquipeProfId = ref(props.professores?.[0]?.id || '');
@@ -45,15 +47,30 @@ const equipeEditandoId = ref(null);
 const editEquipeNome = ref('');
 const editEquipeDescricao = ref('');
 const editEquipeAno = ref(new Date().getFullYear());
+const editEquipeTurma = ref('3A');
 const editEquipeUrl = ref('');
 const editEquipeGithub = ref('');
 const editEquipeProfId = ref('');
+
+// Filtro de Turma
+const turmaFiltro = ref('todas');
+
+const turmasDisponiveis = computed(() => {
+  const setTurmas = new Set(props.equipes.map(e => e.turma || '3A'));
+  return Array.from(setTurmas).sort();
+});
+
+const equipesFiltradas = computed(() => {
+  if (turmaFiltro.value === 'todas') return props.equipes;
+  return props.equipes.filter(e => (e.turma || '3A') === turmaFiltro.value);
+});
 
 const abrirModalEdicao = (equipe) => {
   equipeEditandoId.value = equipe.id;
   editEquipeNome.value = equipe.nome;
   editEquipeDescricao.value = equipe.descricao || '';
   editEquipeAno.value = equipe.ano;
+  editEquipeTurma.value = equipe.turma || '3A';
   editEquipeUrl.value = equipe.url || '';
   editEquipeGithub.value = equipe.github || '';
   editEquipeProfId.value = equipe.prof_id || props.professores?.[0]?.id;
@@ -66,6 +83,7 @@ const submeterEdicaoEquipe = () => {
     nome: editEquipeNome.value,
     descricao: editEquipeDescricao.value,
     ano: editEquipeAno.value,
+    turma: editEquipeTurma.value,
     url: editEquipeUrl.value,
     github: editEquipeGithub.value,
     prof_id: editEquipeProfId.value
@@ -83,6 +101,7 @@ const submeterNovaEquipe = () => {
     nome: novaEquipeNome.value,
     descricao: novaEquipeDescricao.value,
     ano: novaEquipeAno.value,
+    turma: novaEquipeTurma.value,
     url: novaEquipeUrl.value,
     github: novaEquipeGithub.value,
     prof_id: novaEquipeProfId.value
@@ -143,6 +162,17 @@ const submeterImportacao = (event) => {
         </div>
 
         <div class="flex items-center space-x-2">
+          <!-- Filtro por Turma -->
+          <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded border border-slate-300">
+            <Filter class="w-3.5 h-3.5 text-slate-500 ml-1" />
+            <select v-model="turmaFiltro" class="text-xs font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer pr-1">
+              <option value="todas">Todas as Turmas</option>
+              <option v-for="t in turmasDisponiveis" :key="t" :value="t">
+                Turma {{ t }}
+              </option>
+            </select>
+          </div>
+
           <button 
             @click="modalNovaEquipeAberto = true"
             class="bg-[#0F2537] hover:bg-[#1A365D] text-white font-bold text-xs px-3.5 py-2 rounded shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
@@ -160,7 +190,7 @@ const submeterImportacao = (event) => {
           </button>
 
           <span class="bg-slate-200 text-slate-800 text-xs font-bold px-3 py-2 rounded">
-            {{ equipes.length }} Equipe(s)
+            {{ equipesFiltradas.length }} Equipe(s)
           </span>
         </div>
       </div>
@@ -179,14 +209,14 @@ const submeterImportacao = (event) => {
       <!-- Lista de Equipes com Exibição de Orientador, GitHub, URL e Botão Editar -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         <div 
-          v-for="equipe in equipes" 
+          v-for="equipe in equipesFiltradas" 
           :key="equipe.id"
           class="bg-white border border-slate-200 rounded-md shadow-sm hover:shadow transition p-4 flex flex-col justify-between"
         >
           <div>
             <div class="flex items-center justify-between mb-2">
               <div class="text-xs font-mono font-extrabold text-[#9B2C2C] bg-red-50 border border-red-200 px-2 py-0.5 rounded" :title="`ID: ${equipe.id}`">
-                {{ equipe.ano }} &bull; {{ equipe.nome }}
+                {{ equipe.ano }} &bull; Turma {{ equipe.turma }}
               </div>
 
               <!-- Badges de Links Externos (URL, GitHub) & Botão Editar -->
@@ -361,6 +391,18 @@ const submeterImportacao = (event) => {
               />
             </div>
             <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Turma (ex: 3A, 3B, 3)</label>
+              <input 
+                v-model="novaEquipeTurma"
+                type="text" 
+                placeholder="Ex: 3A"
+                class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
               <label class="block text-xs font-semibold text-slate-700 mb-1">Link do Sistema (URL)</label>
               <input 
                 v-model="novaEquipeUrl"
@@ -369,16 +411,15 @@ const submeterImportacao = (event) => {
                 class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
               />
             </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Repositório GitHub (URL)</label>
-            <input 
-              v-model="novaEquipeGithub"
-              type="url" 
-              placeholder="https://github.com/usuario/projeto"
-              class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
-            />
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Repositório GitHub (URL)</label>
+              <input 
+                v-model="novaEquipeGithub"
+                type="url" 
+                placeholder="https://github.com/usuario/projeto"
+                class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
+              />
+            </div>
           </div>
 
           <div>
@@ -448,6 +489,18 @@ const submeterImportacao = (event) => {
               />
             </div>
             <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Turma (ex: 3A, 3B, 3)</label>
+              <input 
+                v-model="editEquipeTurma"
+                type="text" 
+                placeholder="Ex: 3A"
+                class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
               <label class="block text-xs font-semibold text-slate-700 mb-1">Link do Sistema (URL)</label>
               <input 
                 v-model="editEquipeUrl"
@@ -456,16 +509,15 @@ const submeterImportacao = (event) => {
                 class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
               />
             </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Repositório GitHub (URL)</label>
-            <input 
-              v-model="editEquipeGithub"
-              type="url" 
-              placeholder="https://github.com/usuario/projeto"
-              class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
-            />
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">Repositório GitHub (URL)</label>
+              <input 
+                v-model="editEquipeGithub"
+                type="url" 
+                placeholder="https://github.com/usuario/projeto"
+                class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800"
+              />
+            </div>
           </div>
 
           <div>
