@@ -206,7 +206,7 @@ class GeminiAvaliacaoService
                 try {
                     $response = Http::withHeaders([
                         'Content-Type' => 'application/json'
-                    ])->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}", [
+                    ])->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}", [
                         'contents' => [
                             ['parts' => [['text' => $systemPrompt]]]
                         ],
@@ -242,11 +242,12 @@ class GeminiAvaliacaoService
 
         $avaliacoesIndividuais = [];
         foreach ($dadosAlunos as $a) {
+            $totalInteracoes = count($a['comentarios_interacoes_textos'] ?? []);
             $notaTarefas = $a['tarefas_assumidas'] > 0 
                 ? round(min(10.0, max(5.0, ($a['tarefas_concluidas'] / $a['tarefas_assumidas']) * 10)), 1)
                 : 7.0;
 
-            $notaRituais = round(min(10.0, max(6.0, 7.0 + ($a['comentarios_interacoes'] * 0.5))), 1);
+            $notaRituais = round(min(10.0, max(6.0, 7.0 + ($totalInteracoes * 0.5))), 1);
             $notaPostura = 8.5;
 
             $avaliacoesIndividuais[] = [
@@ -254,7 +255,7 @@ class GeminiAvaliacaoService
                 'rituais' => $notaRituais,
                 'tarefas' => $notaTarefas,
                 'postura' => $notaPostura,
-                'observacoes' => "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas e registrou {$a['comentarios_interacoes']} interações."
+                'observacoes' => "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas e registrou {$totalInteracoes} interações."
             ];
         }
 
