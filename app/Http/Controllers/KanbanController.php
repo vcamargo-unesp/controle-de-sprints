@@ -12,6 +12,9 @@ use App\Models\Comentario;
 use App\Models\Anexo;
 use App\Models\Equipe;
 use App\Models\HistoricoTarefa;
+use App\Models\AvaliacaoSprint;
+use App\Models\AvaliacaoIndividual;
+use App\Services\GeminiAvaliacaoService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -197,11 +200,17 @@ class KanbanController extends Controller
             });
         }
 
-        // 3. Sprints Anteriores
-        $sprintsAnteriores = Sprint::where('equipe_id', $equipeId)
+        // 3. Sprints Anteriores agrupadas por bimestre
+        $sprintsAnteriores = Sprint::with(['avaliacaoSprint', 'avaliacoesIndividuais.aluno'])
+            ->where('equipe_id', $equipeId)
             ->where('encerrada', true)
+            ->orderBy('bimestre', 'desc')
             ->orderBy('sequencia', 'desc')
             ->get();
+
+        $sprintsAgrupadas = $sprintsAnteriores->groupBy(function ($item) {
+            return $item->bimestre ?? 1;
+        });
 
         // 4. Todas as colunas da equipe (para painel de gerenciamento)
         $todasColunas = Coluna::where('equipe_id', $equipeId)
@@ -234,6 +243,7 @@ class KanbanController extends Controller
             'sprint'           => $sprint ? [
                 'id'             => $sprint->id,
                 'nome'           => "Sprint {$sprint->sequencia}",
+                'bimestre'       => $sprint->bimestre ?? 1,
                 'dt_inicio'      => $sprint->dt_inicio,
                 'dt_fim'         => $sprint->dt_fim,
                 'percentual'     => $sprint->percentual ?? 0,
@@ -245,7 +255,8 @@ class KanbanController extends Controller
             'todasColunas'     => $todasColunas,
             'tarefasIniciais'  => $tarefasFormatted,
             'tarefasBacklog'   => $tarefasBacklog,
-            'sprintsAnteriores' => $sprintsAnteriores
+            'sprintsAnteriores' => $sprintsAnteriores,
+            'sprintsAgrupadas' => $sprintsAgrupadas
         ]);
     }
 
@@ -512,8 +523,12 @@ class KanbanController extends Controller
             return back()->withErrors(['sprint' => 'Apenas o orientador da equipe ou o Product Owner (PO) podem iniciar uma Sprint.']);
         }
 
-        $request->validate(['tarefas_ids' => 'required|array']);
+        $request->validate([
+            'tarefas_ids' => 'required|array',
+            'bimestre' => 'required|integer|between:1,4'
+        ]);
         $tarefasIds = $request->input('tarefas_ids');
+        $bimestre = (int) $request->input('bimestre');
 
         $ultimaSprint = Sprint::where('equipe_id', $equipeId)->max('sequencia') ?? 0;
 
@@ -524,12 +539,13 @@ class KanbanController extends Controller
             $proximaSequencia = $ultimaSprint + 1;
         }
 
-        DB::transaction(function () use ($equipeId, $proximaSequencia, $tarefasIds) {
+        DB::transaction(function () use ($equipeId, $proximaSequencia, $bimestre, $tarefasIds) {
             $novaSprint = Sprint::create([
                 'equipe_id' => $equipeId,
                 'sequencia' => $proximaSequencia,
+                'bimestre'  => $bimestre,
                 'dt_inicio' => date('Y-m-d'),
-                'dt_fim' => date('Y-m-d', strtotime('+15 days')),
+                'dt_fim'    => date('Y-m-d', strtotime('+15 days')),
                 'percentual' => 0.00,
                 'encerrada' => false
             ]);
@@ -633,6 +649,41 @@ class KanbanController extends Controller
                 'encerrada' => true
             ]);
 
+            // Salva avaliação global da sprint se fornecida
+            if ($request->has('avaliacao_sprint') && is_array($request->input('avaliacao_sprint'))) {
+                $avSprintData = $request->input('avaliacao_sprint');
+                AvaliacaoSprint::updateOrCreate(
+                    ['sprint_id' => $sprintAtual->id],
+                    [
+                        'entrega_valor'     => $avSprintData['entrega_valor'] ?? null,
+                        'qualidade_tecnica' => $avSprintData['qualidade_tecnica'] ?? null,
+                        'processos_rituais' => $avSprintData['processos_rituais'] ?? null,
+                        'documentacao'      => $avSprintData['documentacao'] ?? null,
+                        'observacoes'       => $avSprintData['observacoes'] ?? null,
+                    ]
+                );
+            }
+
+            // Salva avaliações individuais dos alunos se fornecidas
+            if ($request->has('avaliacoes_individuais') && is_array($request->input('avaliacoes_individuais'))) {
+                foreach ($request->input('avaliacoes_individuais') as $avInd) {
+                    if (isset($avInd['aluno_id'])) {
+                        AvaliacaoIndividual::updateOrCreate(
+                            [
+                                'sprint_id' => $sprintAtual->id,
+                                'aluno_id'  => $avInd['aluno_id']
+                            ],
+                            [
+                                'rituais'     => $avInd['rituais'] ?? null,
+                                'tarefas'     => $avInd['tarefas'] ?? null,
+                                'postura'     => $avInd['postura'] ?? null,
+                                'observacoes' => $avInd['observacoes'] ?? null,
+                            ]
+                        );
+                    }
+                }
+            }
+
             // Repassar tarefas pendentes para o Backlog
             $tarefasNaoConcluidas = TarefaColuna::join('col_sprints', 'tarefa_colunas.colsprint_id', '=', 'col_sprints.id')
                 ->join('colunas', 'col_sprints.coluna_id', '=', 'colunas.id')
@@ -653,6 +704,15 @@ class KanbanController extends Controller
         });
 
         return back();
+    }
+
+    /**
+     * Endpoint para IA (Gemini) sugerir notas de avaliação para a Sprint
+     */
+    public function sugerirAvaliacao($sprintId, GeminiAvaliacaoService $geminiService)
+    {
+        $sugestao = $geminiService->gerarSugestaoAvaliacao((int) $sprintId);
+        return response()->json($sugestao);
     }
 
     // =========================================================================

@@ -9,11 +9,21 @@ class Sprint extends Model
 {
     protected $table = 'sprints';
     public $timestamps = false;
-    protected $fillable = ['equipe_id', 'sequencia', 'dt_inicio', 'dt_fim', 'percentual', 'feedback', 'encerrada'];
+    protected $fillable = ['equipe_id', 'sequencia', 'bimestre', 'dt_inicio', 'dt_fim', 'percentual', 'feedback', 'encerrada'];
 
     public function equipe()
     {
         return $this->belongsTo(Equipe::class, 'equipe_id');
+    }
+
+    public function avaliacaoSprint()
+    {
+        return $this->hasOne(AvaliacaoSprint::class, 'sprint_id');
+    }
+
+    public function avaliacoesIndividuais()
+    {
+        return $this->hasMany(AvaliacaoIndividual::class, 'sprint_id');
     }
 
     public function colSprints()

@@ -27,7 +27,10 @@ import {
   Github,
   Globe,
   Pencil,
-  Trash2
+  Trash2,
+  Sparkles,
+  Loader2,
+  Award
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -44,7 +47,8 @@ const props = defineProps({
   todasColunas: Array,
   tarefasIniciais: Array,
   tarefasBacklog: Array,
-  sprintsAnteriores: Array
+  sprintsAnteriores: Array,
+  sprintsAgrupadas: Object
 });
 
 // Tarefas do Kanban
@@ -60,13 +64,23 @@ const modalIntegrantesAberto = ref(false);
 
 const modalEncerramentoAberto = ref(false);
 const feedbackProfessorInput = ref('');
+const isCarregandoIA = ref(false);
+const avaliacaoSprint = ref({
+  entrega_valor: 10.0,
+  qualidade_tecnica: 10.0,
+  processos_rituais: 10.0,
+  documentacao: 10.0,
+  observacoes: ''
+});
+const avaliacoesIndividuais = ref([]);
 
 const modalNovaTarefaBacklogAberto = ref(false);
 const novaTarefaTitulo = ref('');
 const novaTarefaDescricao = ref('');
 
-// Modal de confirmação de número da primeira sprint
+// Modal de Início de Sprint com Bimestre
 const modalInicioSprintAberto = ref(false);
+const bimestreSelecionadoSprint = ref(1);
 const sequenciaInicialSprint = ref(1);
 
 // Form de Comentário e Anexo no Modal
@@ -404,29 +418,93 @@ const criarTarefaBacklog = () => {
 
 const iniciarNovaSprint = () => {
   if (tarefasSelecionadasBacklog.value.length === 0) return;
-  const ehPrimeiraSprint = !props.sprintsAnteriores || props.sprintsAnteriores.length === 0;
-  if (ehPrimeiraSprint) {
-    sequenciaInicialSprint.value = 1;
-    modalInicioSprintAberto.value = true;
-    return;
-  }
-  router.post(`/equipes/${props.equipe.id}/iniciar-sprint`, { tarefas_ids: tarefasSelecionadasBacklog.value });
+  bimestreSelecionadoSprint.value = 1;
+  sequenciaInicialSprint.value = 1;
+  modalInicioSprintAberto.value = true;
 };
 
 const confirmarInicioSprint = () => {
   modalInicioSprintAberto.value = false;
   router.post(`/equipes/${props.equipe.id}/iniciar-sprint`, {
     tarefas_ids: tarefasSelecionadasBacklog.value,
+    bimestre: bimestreSelecionadoSprint.value,
     sequencia_inicial: sequenciaInicialSprint.value
   });
 };
 
+const abrirModalEncerramento = () => {
+  feedbackProfessorInput.value = props.sprint?.feedback || '';
+  avaliacaoSprint.value = {
+    entrega_valor: 10.0,
+    qualidade_tecnica: 10.0,
+    processos_rituais: 10.0,
+    documentacao: 10.0,
+    observacoes: ''
+  };
+  avaliacoesIndividuais.value = (props.equipe?.alunos || []).map(aluno => ({
+    aluno_id: aluno.id,
+    nome: aluno.nome,
+    papel: aluno.pivot?.papel || 'Integrante',
+    rituais: 10.0,
+    tarefas: 10.0,
+    postura: 10.0,
+    observacoes: ''
+  }));
+  modalEncerramentoAberto.value = true;
+};
+
+const sugerirAvaliacaoComIA = async () => {
+  if (!props.sprint?.id) return;
+  isCarregandoIA.value = true;
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const response = await fetch(`/kanban/sugerir-avaliacao/${props.sprint.id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json'
+      }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const sugestao = await response.json();
+
+    if (sugestao) {
+      if (sugestao.entrega_valor !== undefined) avaliacaoSprint.value.entrega_valor = parseFloat(sugestao.entrega_valor);
+      if (sugestao.qualidade_tecnica !== undefined) avaliacaoSprint.value.qualidade_tecnica = parseFloat(sugestao.qualidade_tecnica);
+      if (sugestao.processos_rituais !== undefined) avaliacaoSprint.value.processos_rituais = parseFloat(sugestao.processos_rituais);
+      if (sugestao.documentacao !== undefined) avaliacaoSprint.value.documentacao = parseFloat(sugestao.documentacao);
+      if (sugestao.observacoes) avaliacaoSprint.value.observacoes = sugestao.observacoes;
+
+      if (Array.isArray(sugestao.avaliacoes_individuais)) {
+        sugestao.avaliacoes_individuais.forEach(ind => {
+          const item = avaliacoesIndividuais.value.find(a => a.aluno_id === ind.aluno_id);
+          if (item) {
+            if (ind.rituais !== undefined) item.rituais = parseFloat(ind.rituais);
+            if (ind.tarefas !== undefined) item.tarefas = parseFloat(ind.tarefas);
+            if (ind.postura !== undefined) item.postura = parseFloat(ind.postura);
+            if (ind.observacoes) item.observacoes = ind.observacoes;
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Erro ao obter sugestão de avaliação do Gemini:", e);
+  } finally {
+    isCarregandoIA.value = false;
+  }
+};
+
 const confirmarEncerramento = () => {
   if (!props.sprint) return;
-  router.post(`/kanban/encerrar-sprint/${props.sprint.id}`, { feedback: feedbackProfessorInput.value }, {
+  router.post(`/kanban/encerrar-sprint/${props.sprint.id}`, {
+    feedback: feedbackProfessorInput.value,
+    avaliacao_sprint: avaliacaoSprint.value,
+    avaliacoes_individuais: avaliacoesIndividuais.value
+  }, {
     onSuccess: () => { 
       modalEncerramentoAberto.value = false;
-      router.get(`/equipes/${props.equipe.id}?aba=backlog`);
+      router.get(`/equipes/${props.equipe.id}?aba=anteriores`);
     }
   });
 };
@@ -748,42 +826,103 @@ const parseDetalhes = (detalhes) => {
       </div>
     </div>
 
-    <!-- ABA 3: SPRINTS ANTERIORES (HISTÓRICO SOMENTE LEITURA) -->
-    <div v-else-if="abaAtiva === 'anteriores'" class="space-y-3">
-      <div class="bg-white p-3 rounded border border-slate-200 shadow-sm">
-        <h2 class="text-sm font-bold text-slate-800">Arquivo Histórico de Sprints Encerradas</h2>
-        <p class="text-xs text-slate-500">Visualize os Kanbans encerrados no modo Somente Leitura e o feedback anotado.</p>
+    <!-- ABA 3: SPRINTS ANTERIORES (HISTÓRICO SOMENTE LEITURA AGRUPADO POR BIMESTRE) -->
+    <div v-else-if="abaAtiva === 'anteriores'" class="space-y-6">
+      <div class="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
+            <History class="w-4 h-4 text-blue-600" />
+            <span>Histórico de Sprints Encerradas por Bimestre</span>
+          </h2>
+          <p class="text-xs text-slate-500">Acompanhe e transcreva as avaliações de cada bimestre letivo.</p>
+        </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div 
-          v-for="s in sprintsAnteriores" 
-          :key="s.id" 
-          class="bg-white border border-slate-200 rounded-md p-3 shadow-sm hover:border-slate-400 transition flex flex-col justify-between"
-        >
-          <div>
-            <div class="flex justify-between items-center mb-1">
-              <span class="text-xs font-bold text-slate-800">Sprint {{ s.sequencia }}</span>
-              <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                {{ s.percentual || 0 }}% Concluído
-              </span>
-            </div>
+      <!-- Mensagem quando não há histórico -->
+      <div v-if="!sprintsAgrupadas || Object.keys(sprintsAgrupadas).length === 0" class="bg-white border border-slate-200 rounded-lg p-8 text-center text-xs text-slate-500">
+        Nenhuma sprint finalizada até o momento nesta equipe.
+      </div>
 
-            <p class="text-xs text-slate-500 mb-2">Encerrada em: <strong>{{ s.dt_fim || 'Sem data' }}</strong></p>
-
-            <div v-if="s.feedback" class="bg-slate-50 p-2 rounded border border-slate-200 text-xs text-slate-700 mb-3">
-              <strong class="text-slate-900 block font-semibold mb-0.5">Feedback do Professor:</strong>
-              {{ s.feedback }}
-            </div>
+      <!-- Laço 1: Itera sobre os Bimestres (chaves do objeto) -->
+      <div 
+        v-for="(sprintsDoBimestre, bimestreNum) in sprintsAgrupadas" 
+        :key="bimestreNum" 
+        class="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs"
+      >
+        <!-- Cabeçalho do Bimestre -->
+        <div class="bg-[#0F2537] px-4 py-2.5 flex justify-between items-center border-b-2 border-blue-600">
+          <div class="flex items-center space-x-2">
+            <Calendar class="w-4 h-4 text-blue-400" />
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-white">
+              {{ bimestreNum }}º Bimestre Letivo
+            </h3>
           </div>
+          <span class="text-[11px] font-semibold text-slate-300 bg-white/10 px-2 py-0.5 rounded">
+            {{ sprintsDoBimestre.length }} {{ sprintsDoBimestre.length === 1 ? 'Sprint' : 'Sprints' }}
+          </span>
+        </div>
 
-          <Link 
-            :href="`/equipes/${equipe.id}?aba=sprint-atual&sprint_id=${s.id}`" 
-            class="w-full inline-flex justify-center items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-1.5 rounded transition"
+        <!-- Grid das Sprints do Bimestre -->
+        <div class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/50">
+          <div 
+            v-for="s in sprintsDoBimestre" 
+            :key="s.id" 
+            class="bg-white border border-slate-200 rounded-md p-3 shadow-2xs hover:border-slate-400 transition flex flex-col justify-between"
           >
-            <Eye class="w-3.5 h-3.5" />
-            <span>Ver Kanban Congelado</span>
-          </Link>
+            <div>
+              <div class="flex justify-between items-center mb-1.5 pb-1.5 border-b border-slate-100">
+                <span class="text-xs font-extrabold text-slate-800">Sprint {{ s.sequencia }}</span>
+                <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {{ s.percentual || 0 }}% Concluído
+                </span>
+              </div>
+
+              <div class="text-[11px] text-slate-500 space-y-0.5 mb-2">
+                <p><strong>Início:</strong> {{ s.dt_inicio || 'Sem data' }}</p>
+                <p><strong>Encerramento:</strong> {{ s.dt_fim || 'Sem data' }}</p>
+              </div>
+
+              <!-- Parecer/Feedback do Professor se houver -->
+              <div v-if="s.feedback" class="bg-slate-50 p-2 rounded border border-slate-200 text-xs text-slate-700 mb-3">
+                <strong class="text-slate-900 block font-semibold mb-0.5">Feedback:</strong>
+                <p class="text-[11px] leading-relaxed">{{ s.feedback }}</p>
+              </div>
+
+              <!-- Resumo da Avaliação Global da Sprint se houver -->
+              <div v-if="s.avaliacao_sprint" class="bg-blue-50/60 border border-blue-200 rounded p-2.5 mb-3 text-xs">
+                <span class="font-bold text-blue-900 block mb-1.5 flex items-center space-x-1">
+                  <Award class="w-3.5 h-3.5 text-blue-700" />
+                  <span>Notas Globais da Sprint:</span>
+                </span>
+                <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <div class="bg-white px-2 py-1 rounded border border-blue-100 flex justify-between">
+                    <span class="text-slate-600">Valor:</span>
+                    <strong class="text-slate-800">{{ s.avaliacao_sprint.entrega_valor ?? '-' }}</strong>
+                  </div>
+                  <div class="bg-white px-2 py-1 rounded border border-blue-100 flex justify-between">
+                    <span class="text-slate-600">Técnica:</span>
+                    <strong class="text-slate-800">{{ s.avaliacao_sprint.qualidade_tecnica ?? '-' }}</strong>
+                  </div>
+                  <div class="bg-white px-2 py-1 rounded border border-blue-100 flex justify-between">
+                    <span class="text-slate-600">Processos:</span>
+                    <strong class="text-slate-800">{{ s.avaliacao_sprint.processos_rituais ?? '-' }}</strong>
+                  </div>
+                  <div class="bg-white px-2 py-1 rounded border border-blue-100 flex justify-between">
+                    <span class="text-slate-600">Doc:</span>
+                    <strong class="text-slate-800">{{ s.avaliacao_sprint.documentacao ?? '-' }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Link 
+              :href="`/equipes/${equipe.id}?aba=sprint-atual&sprint_id=${s.id}`" 
+              class="w-full inline-flex justify-center items-center space-x-1 bg-[#0F2537] hover:bg-[#1A365D] text-white font-bold text-xs py-1.5 rounded transition shadow-2xs mt-2"
+            >
+              <Eye class="w-3.5 h-3.5" />
+              <span>Ver Kanban Congelado</span>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -1097,45 +1236,217 @@ const parseDetalhes = (detalhes) => {
       </div>
     </div>
 
-    <!-- FASE 5: MODAL DE RITO DE ENCERRAMENTO (REUNIÃO DE REVIEW DO PROFESSOR) -->
-    <div v-if="modalEncerramentoAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
-        <div class="bg-[#9B2C2C] px-4 py-3 text-white flex items-center justify-between">
-          <h3 class="text-sm font-bold">Encerrar Sprint & Avaliação</h3>
-          <button @click="modalEncerramentoAberto = false" class="text-white cursor-pointer">
+    <!-- MODAL DE RITO DE ENCERRAMENTO E AVALIAÇÃO COM IA (GEMINI) -->
+    <div v-if="modalEncerramentoAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-300 flex flex-col max-h-[90vh]">
+        
+        <!-- Topbar do Modal -->
+        <div class="bg-[#9B2C2C] px-5 py-3 text-white flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <CheckCircle2 class="w-5 h-5" />
+            <h3 class="text-sm font-bold tracking-wide">Encerrar Sprint {{ sprint?.sequencia }} & Avaliação Pedagógica</h3>
+          </div>
+          <button @click="modalEncerramentoAberto = false" class="text-white hover:text-slate-200 cursor-pointer">
             <X class="w-5 h-5" />
           </button>
         </div>
 
-        <div class="p-4 space-y-3">
-          <p class="text-xs text-slate-600">
-            Ao encerrar a <strong>{{ sprint?.nome }}</strong>, os resultados atuais serão congelados nas Sprints Anteriores e o parecer/feedback será registrado. As tarefas pendentes voltarão para o Backlog para serem atribuídas à próxima Sprint.
-          </p>
-
-          <div class="bg-slate-50 p-3 rounded border border-slate-200">
-            <span class="text-xs font-bold text-slate-800">Percentual de Conclusão Calculado:</span>
-            <span class="text-base font-extrabold text-emerald-700 block mt-0.5">{{ sprint?.percentual || 0 }}%</span>
+        <div class="p-5 space-y-5 overflow-y-auto flex-1 bg-slate-50/50">
+          
+          <!-- Banner de Ação com Botão IA Destaque -->
+          <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-lg p-4 text-white shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h4 class="text-sm font-bold flex items-center space-x-1.5 text-purple-200">
+                <Sparkles class="w-4 h-4 text-amber-300 animate-pulse" />
+                <span>Avaliação Automática com Gemini AI</span>
+              </h4>
+              <p class="text-xs text-purple-100/80 mt-0.5">
+                Analisa o histórico de tarefas concluídas, comentários, entregas e anexos da Sprint para sugerir notas.
+              </p>
+            </div>
+            <button
+              @click="sugerirAvaliacaoComIA"
+              :disabled="isCarregandoIA"
+              class="px-4 py-2 rounded-md bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-extrabold shadow cursor-pointer transition flex items-center space-x-2 shrink-0 disabled:opacity-50"
+            >
+              <Loader2 v-if="isCarregandoIA" class="w-4 h-4 animate-spin text-slate-950" />
+              <Sparkles v-else class="w-4 h-4 text-slate-950" />
+              <span>{{ isCarregandoIA ? 'Analisando Sprint...' : '✨ Sugerir Avaliação com IA' }}</span>
+            </button>
           </div>
 
+          <!-- Resumo de Conclusão da Sprint -->
+          <div class="bg-white p-3.5 rounded-md border border-slate-200 shadow-2xs flex justify-between items-center">
+            <div>
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block">Progresso Real Calculado</span>
+              <span class="text-lg font-black text-emerald-600">{{ sprint?.percentual || 0 }}% das tarefas concluídas</span>
+            </div>
+            <div class="text-right text-xs text-slate-500">
+              <span>Equipe: <strong class="text-slate-800">{{ equipe.nome }}</strong></span>
+            </div>
+          </div>
+
+          <!-- Grade 1: Critérios Globais da Sprint (avaliacoes_sprint) -->
+          <div class="bg-white p-4 rounded-md border border-slate-200 shadow-2xs space-y-3">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 border-b pb-2 flex items-center space-x-1.5">
+              <Award class="w-4 h-4 text-blue-600" />
+              <span>Avaliação Global do Grupo (0.0 a 10.0)</span>
+            </h4>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Entrega de Valor</label>
+                <input
+                  v-model.number="avaliacaoSprint.entrega_valor"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Qualidade Técnica</label>
+                <input
+                  v-model.number="avaliacaoSprint.qualidade_tecnica"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Processos & Rituais</label>
+                <input
+                  v-model.number="avaliacaoSprint.processos_rituais"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Documentação</label>
+                <input
+                  v-model.number="avaliacaoSprint.documentacao"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="10"
+                  class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Observações Globais da Sprint</label>
+              <textarea
+                v-model="avaliacaoSprint.observacoes"
+                rows="2"
+                placeholder="Observações técnicas e pedagógicas da sprint..."
+                class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-slate-500 focus:outline-none"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Grade 2: Avaliações Individuais por Aluno (avaliacoes_individuais) -->
+          <div class="bg-white p-4 rounded-md border border-slate-200 shadow-2xs space-y-3">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 border-b pb-2 flex items-center space-x-1.5">
+              <Users class="w-4 h-4 text-emerald-600" />
+              <span>Avaliações Individuais dos Alunos</span>
+            </h4>
+
+            <div class="space-y-3">
+              <div
+                v-for="alunoAv in avaliacoesIndividuais"
+                :key="alunoAv.aluno_id"
+                class="p-3 bg-slate-50 border border-slate-200 rounded-md space-y-2"
+              >
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-bold text-slate-800">{{ alunoAv.nome }}</span>
+                  <span class="text-[10px] font-semibold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">{{ alunoAv.papel }}</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                  <div>
+                    <label class="block text-[10px] font-semibold text-slate-600 mb-0.5">Rituais</label>
+                    <input
+                      v-model.number="alunoAv.rituais"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      class="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-mono font-bold bg-white focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-semibold text-slate-600 mb-0.5">Tarefas</label>
+                    <input
+                      v-model.number="alunoAv.tarefas"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      class="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-mono font-bold bg-white focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-semibold text-slate-600 mb-0.5">Postura</label>
+                    <input
+                      v-model.number="alunoAv.postura"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      class="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-mono font-bold bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    v-model="alunoAv.observacoes"
+                    type="text"
+                    placeholder="Justificativa / Observação individual..."
+                    class="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parecer Qualitativo do Professor -->
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Feedback Qualitativo do Professor</label>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Parecer / Feedback Qualitativo Final do Professor</label>
             <textarea 
               v-model="feedbackProfessorInput"
-              rows="3"
-              placeholder="Digite suas orientações e parecer qualitativo para a equipe..."
+              rows="2"
+              placeholder="Digite o parecer final para registrar no encerramento da Sprint..."
               class="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-slate-500 focus:outline-none"
             ></textarea>
           </div>
+
         </div>
 
-        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end space-x-2">
-          <button @click="modalEncerramentoAberto = false" class="px-3 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer">
+        <!-- Footer do Modal -->
+        <div class="bg-slate-50 px-5 py-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button 
+            @click="modalEncerramentoAberto = false" 
+            class="px-4 py-2 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+          >
             Cancelar
           </button>
-          <button @click="confirmarEncerramento" class="px-3 py-1.5 rounded bg-[#9B2C2C] text-white text-xs font-semibold hover:bg-[#7B1D1D] cursor-pointer">
-            Confirmar Encerramento
+          <button 
+            @click="confirmarEncerramento" 
+            class="px-4 py-2 rounded bg-[#9B2C2C] text-white text-xs font-bold hover:bg-[#7B1D1D] shadow cursor-pointer transition flex items-center space-x-1.5"
+          >
+            <CheckCircle2 class="w-4 h-4" />
+            <span>Salvar e Fechar Sprint</span>
           </button>
         </div>
+
       </div>
     </div>
 
@@ -1236,13 +1547,13 @@ const parseDetalhes = (detalhes) => {
       </div>
     </div>
 
-    <!-- MODAL: NÚMERO DA PRIMEIRA SPRINT -->
+    <!-- MODAL: NÚMERO E BIMESTRE DA SPRINT -->
     <div v-if="modalInicioSprintAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden border border-slate-200">
         <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
           <h3 class="text-sm font-bold flex items-center space-x-2">
             <Send class="w-4 h-4 text-emerald-400" />
-            <span>Iniciar Primeira Sprint</span>
+            <span>Iniciar Nova Sprint</span>
           </h3>
           <button @click="modalInicioSprintAberto = false" class="text-slate-300 hover:text-white cursor-pointer">
             <X class="w-5 h-5" />
@@ -1250,27 +1561,37 @@ const parseDetalhes = (detalhes) => {
         </div>
 
         <div class="p-5 space-y-4">
-          <p class="text-xs text-slate-600 leading-relaxed">
-            Esta é a <strong>primeira sprint registrada</strong> no sistema para esta equipe.
-          </p>
-          <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 leading-relaxed">
-            <strong>O projeto já estava em andamento?</strong><br>
-            Se a equipe já completou sprints anteriores fora do sistema, informe o número correto abaixo para manter a sequência real do projeto.
-          </div>
-
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1.5">
-              Número desta Sprint
+              Bimestre Letivo <span class="text-red-500">*</span>
             </label>
-            <input
-              v-model.number="sequenciaInicialSprint"
-              type="number"
-              min="1"
-              class="w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
-            />
-            <p class="text-[11px] text-slate-400 mt-1">
-              Ex: se já completaram 2 sprints antes, coloque <strong>3</strong>.
-            </p>
+            <select
+              v-model.number="bimestreSelecionadoSprint"
+              class="w-full border border-slate-300 rounded px-3 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-slate-500 focus:outline-none bg-white"
+            >
+              <option :value="1">1º Bimestre</option>
+              <option :value="2">2º Bimestre</option>
+              <option :value="3">3º Bimestre</option>
+              <option :value="4">4º Bimestre</option>
+            </select>
+          </div>
+
+          <div v-if="!sprintsAnteriores || sprintsAnteriores.length === 0" class="space-y-2">
+            <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 leading-relaxed">
+              <strong>Primeira sprint no sistema!</strong><br>
+              Se a equipe já completou sprints anteriores fora do sistema, informe o número da sequência.
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                Número da Sequência Inicial
+              </label>
+              <input
+                v-model.number="sequenciaInicialSprint"
+                type="number"
+                min="1"
+                class="w-full border border-slate-300 rounded px-3 py-2 text-sm text-slate-800 font-mono font-bold focus:ring-1 focus:ring-slate-500 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -1283,11 +1604,11 @@ const parseDetalhes = (detalhes) => {
           </button>
           <button
             @click="confirmarInicioSprint"
-            :disabled="!sequenciaInicialSprint || sequenciaInicialSprint < 1"
+            :disabled="!bimestreSelecionadoSprint"
             class="px-3.5 py-1.5 rounded bg-[#0F2537] text-white text-xs font-semibold hover:bg-[#1A365D] disabled:opacity-50 cursor-pointer flex items-center space-x-1.5"
           >
             <Send class="w-3.5 h-3.5" />
-            <span>Iniciar Sprint {{ sequenciaInicialSprint }}</span>
+            <span>Iniciar Sprint</span>
           </button>
         </div>
       </div>
