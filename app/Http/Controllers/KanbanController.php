@@ -319,12 +319,31 @@ class KanbanController extends Controller
         return back();
     }
 
-    private function tarefaEstaEmSprintEncerrada($tarefaId): bool
+    private function tarefaEstaEmSprintEncerrada($tarefaId, ?int $sprintId = null): bool
     {
-        return TarefaColuna::join('sprints', 'tarefa_colunas.sprint_id', '=', 'sprints.id')
+        if ($sprintId) {
+            $sprint = Sprint::find($sprintId);
+            return $sprint ? (bool) $sprint->encerrada : false;
+        }
+
+        // Se a tarefa está alocada em alguma sprint ativa (aberta), ela NÃO está bloqueada
+        $temSprintAtiva = TarefaColuna::join('sprints', 'tarefa_colunas.sprint_id', '=', 'sprints.id')
             ->where('tarefa_colunas.tarefa_id', $tarefaId)
-            ->where('sprints.encerrada', true)
+            ->where('sprints.encerrada', false)
             ->exists();
+
+        if ($temSprintAtiva) {
+            return false;
+        }
+
+        // Se não tem sprint ativa, verifica se a sprint mais recente da tarefa já foi encerrada
+        $sprintMaisRecente = TarefaColuna::join('sprints', 'tarefa_colunas.sprint_id', '=', 'sprints.id')
+            ->where('tarefa_colunas.tarefa_id', $tarefaId)
+            ->orderBy('sprints.sequencia', 'desc')
+            ->select('sprints.encerrada')
+            ->first();
+
+        return $sprintMaisRecente ? (bool) $sprintMaisRecente->encerrada : false;
     }
 
     public function editarTarefa(Request $request, $tarefaId)
