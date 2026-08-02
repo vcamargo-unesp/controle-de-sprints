@@ -53,8 +53,31 @@ class GeminiAvaliacaoService
             }
 
             $responsaveis = $tarefa->responsaveis->pluck('nome', 'id')->toArray();
-            $comentariosCount = $tarefa->comentarios->count();
-            $anexosCount = $tarefa->anexos->count();
+            
+            // Comentários dos professores na tarefa
+            $comentariosProfessores = $tarefa->comentarios
+                ->filter(fn($c) => !empty($c->prof_id))
+                ->map(fn($c) => [
+                    'professor' => $c->professor?->nome ?? 'Orientador',
+                    'texto' => $c->texto
+                ])->values()->toArray();
+
+            // Comentários dos alunos na tarefa
+            $comentariosAlunos = $tarefa->comentarios
+                ->filter(fn($c) => !empty($c->aluno_id))
+                ->map(fn($c) => [
+                    'aluno' => $c->aluno?->nome ?? 'Aluno',
+                    'texto' => $c->texto
+                ])->values()->toArray();
+
+            // Histórico auditável de movimentações e ações na tarefa
+            $historicoAcoes = $tarefa->historicos
+                ->take(10)
+                ->map(fn($h) => [
+                    'autor' => $h->aluno?->nome ?? $h->professor?->nome ?? 'Sistema',
+                    'acao' => $h->descricao,
+                    'data' => $h->created_at ? $h->created_at->format('d/m/Y H:i') : null
+                ])->values()->toArray();
 
             $dadosTarefas[] = [
                 'id' => $tarefa->id,
@@ -62,8 +85,10 @@ class GeminiAvaliacaoService
                 'coluna_atual' => $colSprint->coluna->titulo ?? 'Desconhecida',
                 'concluida' => $isConcluido,
                 'responsaveis' => $responsaveis,
-                'total_comentarios' => $comentariosCount,
-                'total_anexos_doc' => $anexosCount,
+                'comentarios_professores' => $comentariosProfessores,
+                'comentarios_alunos' => $comentariosAlunos,
+                'historico_movimentacoes' => $historicoAcoes,
+                'total_anexos_doc' => $tarefa->anexos->count(),
             ];
         }
 
@@ -74,8 +99,9 @@ class GeminiAvaliacaoService
         foreach ($alunos as $aluno) {
             $tarefasAssumidas = 0;
             $tarefasConcluidasAluno = 0;
-            $comentariosFeitos = 0;
+            $comentariosFeitos = [];
             $anexosEnviados = 0;
+            $historicoAcoesAluno = [];
 
             foreach ($tarefasColuna as $tc) {
                 $t = $tc->tarefa;
@@ -89,7 +115,16 @@ class GeminiAvaliacaoService
                     }
                 }
 
-                $comentariosFeitos += $t->comentarios->where('aluno_id', $aluno->id)->count();
+                // Coletar textos reais dos comentários do aluno
+                foreach ($t->comentarios->where('aluno_id', $aluno->id) as $com) {
+                    $comentariosFeitos[] = "Na tarefa «{$t->titulo}»: \"{$com->texto}\"";
+                }
+
+                // Coletar histórico de ações do aluno
+                foreach ($t->historicos->where('aluno_id', $aluno->id)->take(5) as $hist) {
+                    $historicoAcoesAluno[] = "Na tarefa «{$t->titulo}»: {$hist->descricao}";
+                }
+
                 $anexosEnviados += $t->anexos->where('aluno_id', $aluno->id)->count();
             }
 
@@ -99,7 +134,8 @@ class GeminiAvaliacaoService
                 'papel' => $aluno->papel ?? 'Integrante',
                 'tarefas_assumidas' => $tarefasAssumidas,
                 'tarefas_concluidas' => $tarefasConcluidasAluno,
-                'comentarios_interacoes' => $comentariosFeitos,
+                'comentarios_interacoes_textos' => $comentariosFeitos,
+                'historico_movimentacoes_aluno' => $historicoAcoesAluno,
                 'documentos_anexados' => $anexosEnviados
             ];
         }
@@ -239,10 +275,17 @@ class GeminiAvaliacaoService
     {
         $apiKey = env('GEMINI_API_KEY');
 
-        $prompt = "Atue como um analista de desempenho acadêmico. Abaixo estão as notas e feedbacks de um aluno de colégio técnico durante as Sprints do {$bimestre}º Bimestre.\n"
-            . "Aluno: {$aluno->nome} (Papel: " . ($aluno->papel ?? 'Integrante') . ").\n"
-            . "Sprints do Bimestre: " . json_encode($sprintsDetalhadas, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n"
-            . "Escreva um único parágrafo objetivo (máximo 4 linhas) resumindo o desempenho, destacando evolução técnica e comportamental, e apontando o principal ponto de atenção.";
+        $prompt = "Atue como um orientador e coordenador pedagógico sênior de um colégio técnico de excelência.\n"
+            . "Sua tarefa é escrever um parecer pedagógico HIPER-PERSONALIZADO, humano e analítico sobre o desempenho real do aluno durante o {$bimestre}º Bimestre.\n\n"
+            . "MUITO IMPORTANTE - REGRAS RÍGIDAS:\n"
+            . "1. NUNCA use frases genéricas ou clichês acadêmicos padrão (como 'mantendo boa dedicação aos rituais').\n"
+            . "2. Cite OBRIGATORIAMENTE o papel do aluno (" . ($aluno->papel ?? 'Integrante') . ") e cite os NOMES EXATOS das tarefas atribuídas a ele que constam no JSON fornecido.\n"
+            . "3. Analise as notas e observações comportamentais dadas pelo orientador (rituais, postura e tarefas) de forma direta.\n"
+            . "4. Estruture o texto em um parecer coeso de 3 a 5 frases fluidas destacando: Entregas Técnicas Específicas, Desempenho Atitudinal/Comportamental e Recomendação Prática de Desenvolvimento.\n\n"
+            . "Dados do Aluno:\n"
+            . "Nome: {$aluno->nome}\n"
+            . "Papel: " . ($aluno->papel ?? 'Integrante') . "\n"
+            . "Sprints & Tarefas do Bimestre: " . json_encode($sprintsDetalhadas, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         if (!empty($apiKey) && $apiKey !== 'sua_chave_gerada_aqui') {
             try {
@@ -271,8 +314,27 @@ class GeminiAvaliacaoService
             }
         }
 
-        // Fallback textual
-        $totalSprints = count($sprintsDetalhadas);
-        return "Durante o {$bimestre}º Bimestre, o aluno {$aluno->nome} participou de {$totalSprints} sprint(s), mantendo boa dedicação aos rituais da equipe e cumprimento das tarefas atribuídas. Demonstrou evolução no acompanhamento dos prazos. Recomenda-se continuar aprimorando a documentação e a participação ativa no Kanban.";
+        // Fallback textual dinâmico focado nas tarefas e notas reais do aluno
+        $todasTarefas = [];
+        $obsProf = [];
+        $totalConcluidas = 0;
+
+        foreach ($sprintsDetalhadas as $sp) {
+            if (!empty($sp['tarefas_assumidas_pelo_aluno']) && is_array($sp['tarefas_assumidas_pelo_aluno'])) {
+                foreach ($sp['tarefas_assumidas_pelo_aluno'] as $t) {
+                    $todasTarefas[] = "«{$t['titulo']}» (" . ($t['concluida'] ? 'Concluída' : 'Em andamento') . ")";
+                    if ($t['concluida']) $totalConcluidas++;
+                }
+            }
+            if (!empty($sp['avaliacao_individual']['observacoes_professor'])) {
+                $obsProf[] = $sp['avaliacao_individual']['observacoes_professor'];
+            }
+        }
+
+        $papelStr = $aluno->papel ?? 'Integrante';
+        $listaTarefasStr = !empty($todasTarefas) ? implode(', ', array_slice($todasTarefas, 0, 3)) : 'atividades do backlog';
+        $obsStr = !empty($obsProf) ? ' Nota do orientador: "' . implode('; ', $obsProf) . '".' : '';
+
+        return "No {$bimestre}º Bimestre, {$aluno->nome} atuou como {$papelStr} da equipe. Foi responsável por {$listaTarefasStr}, totalizando {$totalConcluidas} entrega(s) concluída(s).{$obsStr} Recomendação: Manter a consistência na atualização diária do quadro e focar na expansão das competências técnicas da equipe.";
     }
 }

@@ -238,22 +238,55 @@ class NotasController extends Controller
             ->get();
 
         $sprintsDetalhadas = $sprints->map(function ($s) use ($aluno) {
+            // Buscar tarefas em que o aluno foi responsável na Sprint
+            $colsprintsIds = \App\Models\ColSprint::where('sprint_id', $s->id)->pluck('id');
+            
+            $tarefasDoAluno = \App\Models\TarefaColuna::with([
+                'tarefa.comentarios.professor',
+                'tarefa.historicos',
+                'colsprint.coluna'
+            ])
+                ->whereIn('colsprint_id', $colsprintsIds)
+                ->whereHas('tarefa.responsaveis', function ($q) use ($aluno) {
+                    $q->where('alunos.id', $aluno->id);
+                })
+                ->get()
+                ->map(function ($tc) {
+                    $tarefa = $tc->tarefa;
+
+                    $comentariosProfs = $tarefa->comentarios
+                        ->filter(fn($c) => !empty($c->prof_id))
+                        ->map(fn($c) => "Prof. {$c->professor?->nome}: \"{$c->texto}\"")
+                        ->values()->toArray();
+
+                    $historicoAcoes = $tarefa->historicos
+                        ->take(5)
+                        ->map(fn($h) => $h->descricao)
+                        ->values()->toArray();
+
+                    return [
+                        'titulo' => $tarefa->titulo,
+                        'concluida' => (bool) ($tc->colsprint?->coluna?->concluido),
+                        'coluna' => $tc->colsprint?->coluna?->titulo ?? 'N/A',
+                        'comentarios_dos_professores' => $comentariosProfs,
+                        'historico_movimentacoes' => $historicoAcoes
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            $avInd = $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id);
+
             return [
                 'sprint' => "Sprint {$s->sequencia}",
-                'percentual' => "{$s->percentual}%",
-                'feedback_professor' => $s->feedback,
-                'avaliacao_sprint' => $s->avaliacaoSprint ? [
-                    'entrega_valor' => $s->avaliacaoSprint->entrega_valor,
-                    'qualidade_tecnica' => $s->avaliacaoSprint->qualidade_tecnica,
-                    'processos_rituais' => $s->avaliacaoSprint->processos_rituais,
-                    'documentacao' => $s->avaliacaoSprint->documentacao,
-                    'observacoes' => $s->avaliacaoSprint->observacoes,
-                ] : null,
-                'avaliacao_individual' => $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id) ? [
-                    'rituais' => $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id)->rituais,
-                    'tarefas' => $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id)->tarefas,
-                    'postura' => $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id)->postura,
-                    'observacoes' => $s->avaliacoesIndividuais->firstWhere('aluno_id', $aluno->id)->observacoes,
+                'percentual_sprint' => "{$s->percentual}%",
+                'feedback_geral_professor' => $s->feedback,
+                'tarefas_assumidas_pelo_aluno' => $tarefasDoAluno,
+                'avaliacao_individual' => $avInd ? [
+                    'rituais' => $avInd->rituais,
+                    'tarefas' => $avInd->tarefas,
+                    'postura' => $avInd->postura,
+                    'observacoes_professor' => $avInd->observacoes,
                 ] : null
             ];
         })->toArray();
