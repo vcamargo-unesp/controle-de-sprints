@@ -449,7 +449,7 @@ const abrirModalEncerramento = () => {
   avaliacoesIndividuais.value = (props.equipe?.alunos || []).map(aluno => ({
     aluno_id: aluno.id,
     nome: aluno.nome,
-    papel: aluno.pivot?.papel || 'Integrante',
+    papel: aluno.papel || aluno.pivot?.papel || 'Integrante',
     rituais: 10.0,
     tarefas: 10.0,
     postura: 10.0,
@@ -462,6 +462,18 @@ const sugerirAvaliacaoComIA = async () => {
   if (!props.sprint?.id) return;
   isCarregandoIA.value = true;
   try {
+    if (!avaliacoesIndividuais.value || avaliacoesIndividuais.value.length === 0) {
+      avaliacoesIndividuais.value = (props.equipe?.alunos || []).map(aluno => ({
+        aluno_id: aluno.id,
+        nome: aluno.nome,
+        papel: aluno.papel || aluno.pivot?.papel || 'Integrante',
+        rituais: 10.0,
+        tarefas: 10.0,
+        postura: 10.0,
+        observacoes: ''
+      }));
+    }
+
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const response = await fetch(`/kanban/sugerir-avaliacao/${props.sprint.id}`, {
       method: 'POST',
@@ -728,7 +740,7 @@ const parseDetalhes = (detalhes) => {
             <span>Gerenciar Colunas</span>
           </button>
           <button 
-            @click="modalEncerramentoAberto = true"
+            @click="abrirModalEncerramento"
             class="bg-[#9B2C2C] hover:bg-[#7B1D1D] text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"
           >
             <CheckCircle2 class="w-4 h-4" />

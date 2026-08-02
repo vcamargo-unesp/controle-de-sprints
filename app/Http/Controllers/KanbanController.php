@@ -164,8 +164,8 @@ class KanbanController extends Controller
         if ($sprint) {
             $bloqueadaPorPrazo = $sprint->encerrada || $aba === 'anteriores';
 
-            // Sincroniza todas as colunas ativas da equipe para garantir visualização completa do Kanban
-            $colunasEquipe = Coluna::where('equipe_id', $equipeId)->orderBy('sequencia')->get();
+            // Sincroniza e deduplica todas as colunas ativas da equipe para o Kanban
+            $colunasEquipe = Coluna::where('equipe_id', $equipeId)->orderBy('sequencia')->get()->unique('titulo');
             foreach ($colunasEquipe as $colE) {
                 ColSprint::firstOrCreate([
                     'coluna_id' => $colE->id,
@@ -176,6 +176,10 @@ class KanbanController extends Controller
             $colunasSprint = ColSprint::with('coluna')
                 ->where('sprint_id', $sprint->id)
                 ->get()
+                ->unique('coluna_id')
+                ->unique(function ($cs) {
+                    return $cs->coluna ? $cs->coluna->titulo : $cs->coluna_id;
+                })
                 ->sortBy(function ($cs) {
                     return $cs->coluna ? $cs->coluna->sequencia : 999;
                 })
