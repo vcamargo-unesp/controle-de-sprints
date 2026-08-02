@@ -64,17 +64,12 @@ class NotasController extends Controller
             ->orderBy('sequencia', 'asc')
             ->get();
 
-        // Buscar pesos salvos para a turma (fallback = 25.0)
-        $pesosSalvos = PesoTurma::where('ano', $anoSelecionado)
-            ->where('turma', $turmaSelecionada)
-            ->pluck('peso', 'bimestre')
-            ->toArray();
-
+        // Pesos iniciais reativos de interface (sem necessidade de armazenamento)
         $pesos = [
-            1 => (float)($pesosSalvos[1] ?? 1.0),
-            2 => (float)($pesosSalvos[2] ?? 1.0),
-            3 => (float)($pesosSalvos[3] ?? 1.0),
-            4 => (float)($pesosSalvos[4] ?? 1.0),
+            1 => 1.0,
+            2 => 1.0,
+            3 => 1.0,
+            4 => 1.0,
         ];
 
         // Processar notas consolidadas de cada aluno
