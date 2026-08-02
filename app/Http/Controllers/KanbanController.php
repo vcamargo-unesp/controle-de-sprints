@@ -164,6 +164,15 @@ class KanbanController extends Controller
         if ($sprint) {
             $bloqueadaPorPrazo = $sprint->encerrada || $aba === 'anteriores';
 
+            // Sincroniza todas as colunas ativas da equipe para garantir visualização completa do Kanban
+            $colunasEquipe = Coluna::where('equipe_id', $equipeId)->orderBy('sequencia')->get();
+            foreach ($colunasEquipe as $colE) {
+                ColSprint::firstOrCreate([
+                    'coluna_id' => $colE->id,
+                    'sprint_id' => $sprint->id
+                ]);
+            }
+
             $colunasSprint = ColSprint::with('coluna')
                 ->where('sprint_id', $sprint->id)
                 ->get()

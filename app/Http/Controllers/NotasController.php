@@ -71,10 +71,10 @@ class NotasController extends Controller
             ->toArray();
 
         $pesos = [
-            1 => (float)($pesosSalvos[1] ?? 25.0),
-            2 => (float)($pesosSalvos[2] ?? 25.0),
-            3 => (float)($pesosSalvos[3] ?? 25.0),
-            4 => (float)($pesosSalvos[4] ?? 25.0),
+            1 => (float)($pesosSalvos[1] ?? 1.0),
+            2 => (float)($pesosSalvos[2] ?? 1.0),
+            3 => (float)($pesosSalvos[3] ?? 1.0),
+            4 => (float)($pesosSalvos[4] ?? 1.0),
         ];
 
         // Processar notas consolidadas de cada aluno
@@ -290,10 +290,10 @@ class NotasController extends Controller
             ->toArray();
 
         $pesos = [
-            1 => (float)($pesosSalvos[1] ?? 25.0),
-            2 => (float)($pesosSalvos[2] ?? 25.0),
-            3 => (float)($pesosSalvos[3] ?? 25.0),
-            4 => (float)($pesosSalvos[4] ?? 25.0),
+            1 => (float)($pesosSalvos[1] ?? 1.0),
+            2 => (float)($pesosSalvos[2] ?? 1.0),
+            3 => (float)($pesosSalvos[3] ?? 1.0),
+            4 => (float)($pesosSalvos[4] ?? 1.0),
         ];
 
         // Sprints encerradas da equipe do aluno

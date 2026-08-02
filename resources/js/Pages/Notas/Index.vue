@@ -60,22 +60,28 @@ const somaPesos = computed(() => {
          Number(pesosInput.value[4] || 0);
 });
 
-// Função reativa para calcular a Média Final Ponderada de um aluno
+// Calcula os pontos exatos de contribuição do bimestre (Nota * Peso / 10)
+const calcularContribuição = (nota, peso) => {
+  if (nota === null || nota === undefined || !peso) return null;
+  return ((Number(nota) * Number(peso)) / 10).toFixed(2);
+};
+
+// Função reativa para calcular a Média Final Ponderada (Base 10) de um aluno
 const calcularMediaFinalAluno = (medias) => {
-  let somaPonderada = 0;
+  let somaContribuição = 0;
   let somaPesosValidos = 0;
 
   for (let b = 1; b <= 4; b++) {
     const nota = medias[b];
     const peso = Number(pesosInput.value[b] || 0);
     if (nota !== null && nota !== undefined && peso > 0) {
-      somaPonderada += (nota * peso);
+      somaContribuição += ((Number(nota) * peso) / 10);
       somaPesosValidos += peso;
     }
   }
 
   if (somaPesosValidos === 0) return null;
-  return (somaPonderada / somaPesosValidos).toFixed(1);
+  return ((somaContribuição / somaPesosValidos) * 10).toFixed(1);
 };
 
 // Modal Slide-over de Raio-X do Aluno
@@ -164,35 +170,35 @@ const getBadgeNotaClass = (nota) => {
         </div>
       </div>
 
-      <!-- Barra de Controle de Pesos e Resumo -->
+      <!-- Barra de Controle de Pesos / Coeficientes da Disciplina -->
       <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center space-x-1.5">
             <Award class="w-4 h-4 text-amber-500" />
-            <span>Pesos Ponderados dos Bimestres (Turma {{ turmaSelecionada.ano }} - {{ turmaSelecionada.turma }})</span>
+            <span>Peso / Coeficiente das Sprints na Nota da Disciplina (Turma {{ turmaSelecionada.ano }} - {{ turmaSelecionada.turma }})</span>
           </h3>
           <p class="text-xs text-slate-500 mt-0.5">
-            Ajuste os pesos dos bimestres para recalcular a Média Final de todos os alunos em tempo real.
+            Defina o multiplicador/peso do bimestre para calcular os pontos de contribuição (Nota × Peso) e a Média Ponderada da disciplina.
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <!-- Inputs de Pesos -->
+          <!-- Inputs de Pesos (Coeficientes) -->
           <div class="grid grid-cols-4 gap-2 bg-slate-50 p-2 rounded-md border border-slate-200">
             <div v-for="b in 4" :key="b" class="text-center">
-              <span class="block text-[10px] font-bold text-slate-500 uppercase">{{ b }}º Bim</span>
+              <span class="block text-[10px] font-bold text-slate-500 uppercase">Peso {{ b }}º Bim</span>
               <input
                 v-model.number="pesosInput[b]"
                 type="number"
                 min="0"
-                max="100"
+                step="0.5"
                 class="w-14 text-center border border-slate-300 rounded px-1 py-0.5 text-xs font-mono font-bold bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
 
           <div class="text-xs font-bold text-slate-600">
-            Soma: <span :class="somaPesos === 100 ? 'text-emerald-600 font-extrabold' : 'text-amber-600 font-extrabold'">{{ somaPesos }}%</span>
+            Soma dos Pesos: <span class="text-blue-700 font-extrabold">{{ somaPesos }}</span>
           </div>
 
           <button
@@ -216,11 +222,11 @@ const getBadgeNotaClass = (nota) => {
                 <th class="py-3 px-4 w-12 text-center">Nº</th>
                 <th class="py-3 px-4">Aluno</th>
                 <th class="py-3 px-4">Equipe / Projeto</th>
-                <th class="py-3 px-3 text-center">1º Bimestre</th>
-                <th class="py-3 px-3 text-center">2º Bimestre</th>
-                <th class="py-3 px-3 text-center">3º Bimestre</th>
-                <th class="py-3 px-3 text-center">4º Bimestre</th>
-                <th class="py-3 px-4 text-center bg-[#1A365D]">Média Final</th>
+                <th v-for="b in 4" :key="b" class="py-3 px-3 text-center">
+                  <div>{{ b }}º Bimestre</div>
+                  <div class="text-[9px] font-normal text-amber-300 lowercase">(peso: {{ pesosInput[b] || 1 }})</div>
+                </th>
+                <th class="py-3 px-4 text-center bg-[#1A365D]">Média Ponderada</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-200 text-xs">
@@ -244,18 +250,24 @@ const getBadgeNotaClass = (nota) => {
                   </span>
                 </td>
 
-                <!-- Colunas dos Bimestres 1 a 4 (Clicáveis para abrir Raio-X) -->
+                <!-- Colunas dos Bimestres 1 a 4 (Exibe Nota + Pontos Ponderados Contribuídos) -->
                 <td v-for="b in 4" :key="b" class="py-2.5 px-3 text-center">
-                  <button
-                    @click="abrirRaioX(aluno, b)"
-                    :class="[
-                      'px-2.5 py-1 rounded border text-xs cursor-pointer transition inline-flex items-center space-x-1 shadow-2xs hover:scale-105',
-                      getBadgeNotaClass(aluno.medias[b])
-                    ]"
-                    title="Clique para abrir o Raio-X analítico com IA Gemini"
-                  >
-                    <span>{{ aluno.medias[b] !== null ? aluno.medias[b] : '-' }}</span>
-                  </button>
+                  <div class="flex flex-col items-center">
+                    <button
+                      @click="abrirRaioX(aluno, b)"
+                      :class="[
+                        'px-2.5 py-1 rounded border text-xs cursor-pointer transition inline-flex items-center space-x-1 shadow-2xs hover:scale-105',
+                        getBadgeNotaClass(aluno.medias[b])
+                      ]"
+                      :title="aluno.medias[b] !== null ? `Nota Sprints: ${aluno.medias[b]} | Contribuição na Nota: (${aluno.medias[b]} × ${pesosInput[b] || 1}) / 10 = ${calcularContribuição(aluno.medias[b], pesosInput[b] || 1)} pts` : 'Clique para abrir o Raio-X'"
+                    >
+                      <span>{{ aluno.medias[b] !== null ? aluno.medias[b] : '-' }}</span>
+                    </button>
+                    <!-- Subtexto informando os pontos distribuídos/ponderados -->
+                    <span v-if="aluno.medias[b] !== null" class="text-[9px] font-mono text-slate-600 font-bold mt-0.5" title="Pontos adicionados à nota final da disciplina">
+                      +{{ calcularContribuição(aluno.medias[b], pesosInput[b] || 1) }} pts
+                    </span>
+                  </div>
                 </td>
 
                 <!-- Média Final Ponderada Calculada Reativamente -->

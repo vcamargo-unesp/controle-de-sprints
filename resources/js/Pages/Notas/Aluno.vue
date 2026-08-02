@@ -95,7 +95,10 @@ const getNotaBadgeClass = (nota) => {
                   {{ bData.bimestre }}º Bimestre Letivo
                 </h3>
                 <span class="text-xs text-slate-500">
-                  Peso configurado na média final: <strong>{{ bData.peso }}%</strong>
+                  Peso/Coeficiente na disciplina: <strong>Peso {{ bData.peso }}</strong>
+                  <span v-if="bData.media_consolidada !== null" class="ml-1 text-slate-700 font-mono">
+                    (Contribuição: ({{ bData.media_consolidada }} × {{ bData.peso }}) / 10 = <strong class="text-emerald-700">+{{ ((bData.media_consolidada * bData.peso) / 10).toFixed(2) }} pts</strong> na disciplina)
+                  </span>
                 </span>
               </div>
             </div>
@@ -103,7 +106,7 @@ const getNotaBadgeClass = (nota) => {
             <div class="flex items-center space-x-3">
               <!-- Badge da Nota Consolidada -->
               <div class="text-right">
-                <span class="text-[10px] font-bold text-slate-400 uppercase block">Média no Bimestre</span>
+                <span class="text-[10px] font-bold text-slate-400 uppercase block">Nota Média das Sprints</span>
                 <span 
                   :class="[
                     'px-3 py-0.5 rounded text-sm font-black border shadow-2xs inline-block',
