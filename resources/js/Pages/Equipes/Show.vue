@@ -64,6 +64,7 @@ const modalIntegrantesAberto = ref(false);
 
 const modalEncerramentoAberto = ref(false);
 const feedbackProfessorInput = ref('');
+const contextoProfessorInput = ref('');
 const isCarregandoIA = ref(false);
 const avaliacaoSprint = ref({
   entrega_valor: 10.0,
@@ -439,6 +440,7 @@ const confirmarInicioSprint = () => {
 
 const abrirModalEncerramento = () => {
   feedbackProfessorInput.value = props.sprint?.feedback || '';
+  contextoProfessorInput.value = '';
   avaliacaoSprint.value = {
     entrega_valor: 10.0,
     qualidade_tecnica: 10.0,
@@ -481,7 +483,10 @@ const sugerirAvaliacaoComIA = async () => {
         'Content-Type': 'application/json',
         'X-CSRF-TOKEN': csrfToken,
         'Accept': 'application/json'
-      }
+      },
+      body: JSON.stringify({
+        contexto_professor: contextoProfessorInput.value
+      })
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const sugestao = await response.json();
@@ -1291,7 +1296,7 @@ const parseDetalhes = (detalhes) => {
                 <span>Avaliação Automática com Gemini AI</span>
               </h4>
               <p class="text-xs text-purple-100/80 mt-0.5">
-                Analisa o histórico de tarefas concluídas, comentários, entregas e anexos da Sprint para sugerir notas.
+                Analisa o histórico de tarefas concluídas, entregas e o relato qualitativo do professor para sugerir notas.
               </p>
             </div>
             <button
@@ -1303,6 +1308,23 @@ const parseDetalhes = (detalhes) => {
               <Sparkles v-else class="w-4 h-4 text-slate-950" />
               <span>{{ isCarregandoIA ? 'Analisando Sprint...' : '✨ Sugerir Avaliação com IA' }}</span>
             </button>
+          </div>
+
+          <!-- Observações Contextuais do Professor sobre Relacionamento Interpessoal e Dinâmica -->
+          <div class="bg-amber-50/90 p-3.5 rounded-lg border border-amber-300 space-y-1.5 shadow-2xs">
+            <label class="block text-xs font-bold text-amber-950 flex items-center space-x-1.5">
+              <MessageSquare class="w-4 h-4 text-amber-700" />
+              <span>Relato do Orientador (Relacionamento Interpessoal, Mediação e Dinâmica em Sala)</span>
+            </label>
+            <p class="text-[11px] text-amber-900/90 leading-snug">
+              Descreva fatos comportamentais presenciais, conflitos mediados ou apoio presencial em sala de aula para o <strong>Gemini AI</strong> considerar nas notas de Postura e Rituais.
+            </p>
+            <textarea
+              v-model="contextoProfessorInput"
+              rows="2"
+              placeholder="Ex: Ana mediou bem os conflitos da equipe e liderou em sala; Carlos teve dificuldades de relacionamento e faltou nas reuniões..."
+              class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none placeholder:text-slate-400"
+            ></textarea>
           </div>
 
           <!-- Resumo de Conclusão da Sprint -->

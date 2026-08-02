@@ -15,7 +15,10 @@ class GeminiAvaliacaoService
     /**
      * Gera uma sugestão de avaliação automatizada baseada nos dados e métricas da Sprint.
      */
-    public function gerarSugestaoAvaliacao(int $sprintId): array
+    /**
+     * Gera uma sugestão de avaliação automatizada baseada nos dados, métricas da Sprint e relato comportamental do orientador.
+     */
+    public function gerarSugestaoAvaliacao(int $sprintId, ?string $contextoProfessor = null): array
     {
         $sprint = Sprint::with(['equipe.alunos'])->findOrFail($sprintId);
         $equipe = $sprint->equipe;
@@ -93,7 +96,7 @@ class GeminiAvaliacaoService
             $dadosAlunos[] = [
                 'aluno_id' => $aluno->id,
                 'nome' => $aluno->nome,
-                'papel' => $aluno->pivot->papel ?? 'Integrante',
+                'papel' => $aluno->papel ?? 'Integrante',
                 'tarefas_assumidas' => $tarefasAssumidas,
                 'tarefas_concluidas' => $tarefasConcluidasAluno,
                 'comentarios_interacoes' => $comentariosFeitos,
@@ -116,19 +119,21 @@ class GeminiAvaliacaoService
                 'nome' => $equipe->nome,
                 'projeto' => $equipe->projeto
             ],
+            'observacoes_relato_professor_interpessoal' => $contextoProfessor ?: 'Nenhuma observação extra relatada.',
             'tarefas' => $dadosTarefas,
             'alunos' => $dadosAlunos
         ];
 
-        return $this->chamarGeminiApi($promptData, $sprintId, $dadosAlunos, $percentualConclusao);
+        return $this->chamarGeminiApi($promptData, $sprintId, $dadosAlunos, $percentualConclusao, $contextoProfessor);
     }
 
-    private function chamarGeminiApi(array $promptData, int $sprintId, array $dadosAlunos, float $percentualConclusao): array
+    private function chamarGeminiApi(array $promptData, int $sprintId, array $dadosAlunos, float $percentualConclusao, ?string $contextoProfessor = null): array
     {
         $apiKey = env('GEMINI_API_KEY');
 
         $systemPrompt = "Atue como um assistente de avaliação técnica e pedagógica para um colégio técnico. "
-            . "Analise os dados reais de desempenho de uma Sprint de desenvolvimento de software fornecidos a seguir. "
+            . "Analise os dados reais de desempenho de uma Sprint e leve em consideração OBRIGATORIAMENTE o relato contextual do professor orientador sobre relacionamento interpessoal, comportamento em sala de aula e dinâmica de equipe fornecido a seguir.\n"
+            . "Pondere fortemente esses fatores qualitativos do professor para ajustar com precisão as notas de Postura, Rituais e observações individuais dos alunos.\n\n"
             . "Retorne EXCLUSIVAMENTE um objeto JSON válido, sem formatação markdown ou textos adicionais fora do JSON, contendo a seguinte estrutura exata:\n"
             . "{\n"
             . '  "entrega_valor": number, // nota de 0.0 a 10.0 baseada em % de conclusao e entregas' . "\n"
@@ -142,11 +147,11 @@ class GeminiAvaliacaoService
             . '      "rituais": number, // nota de 0.0 a 10.0' . "\n"
             . '      "tarefas": number, // nota de 0.0 a 10.0' . "\n"
             . '      "postura": number, // nota de 0.0 a 10.0' . "\n"
-            . '      "observacoes": "string com justificativa sucinta do aluno"' . "\n"
+            . '      "observacoes": "string com justificativa sucinta do aluno levando em conta a atuacao tecnica e comportamental"' . "\n"
             . "    }\n"
             . "  ]\n"
             . "}\n\n"
-            . "Dados da Sprint:\n" . json_encode($promptData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            . "Dados da Sprint & Relato do Professor:\n" . json_encode($promptData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         if (!empty($apiKey) && $apiKey !== 'sua_chave_gerada_aqui') {
             try {

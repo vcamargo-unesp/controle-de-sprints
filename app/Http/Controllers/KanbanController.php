@@ -756,11 +756,12 @@ class KanbanController extends Controller
     }
 
     /**
-     * Endpoint para IA (Gemini) sugerir notas de avaliação para a Sprint
+     * Endpoint para gerar sugestão de avaliação via Gemini AI com insumo qualitativo do professor
      */
-    public function sugerirAvaliacao($sprintId, GeminiAvaliacaoService $geminiService)
+    public function sugerirAvaliacao(Request $request, $sprintId, GeminiAvaliacaoService $geminiService)
     {
-        $sugestao = $geminiService->gerarSugestaoAvaliacao((int) $sprintId);
+        $contextoProfessor = $request->input('contexto_professor');
+        $sugestao = $geminiService->gerarSugestaoAvaliacao((int) $sprintId, $contextoProfessor);
         return response()->json($sugestao);
     }
 
