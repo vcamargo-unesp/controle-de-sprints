@@ -169,7 +169,7 @@ class GeminiAvaliacaoService
 
         $systemPrompt = "Atue como um assistente de avaliação técnica e pedagógica para um colégio técnico. "
             . "Analise os dados reais de desempenho de uma Sprint e leve em consideração OBRIGATORIAMENTE o relato contextual do professor orientador sobre relacionamento interpessoal, comportamento em sala de aula e dinâmica de equipe fornecido a seguir.\n"
-            . "Pondere fortemente esses fatores qualitativos do professor para ajustar com precisão as notas de Postura, Rituais e observações individuais dos alunos.\n\n"
+            . "REGRA RÍGIDA DE PRIVACIDADE: Nas observações individuais dos alunos ('avaliacoes_individuais'), inclua APENAS apontamentos e feedbacks referentes especificamente àquele aluno. NUNCA cite nomes, atitudes ou falhas de outros colegas de equipe dentro da observação individual de um estudante.\n\n"
             . "Retorne EXCLUSIVAMENTE um objeto JSON válido, sem formatação markdown ou textos adicionais fora do JSON, contendo a seguinte estrutura exata:\n"
             . "{\n"
             . '  "entrega_valor": number, // nota de 0.0 a 10.0 baseada em % de conclusao e entregas' . "\n"
@@ -252,16 +252,31 @@ class GeminiAvaliacaoService
             $notaPostura = 8.5;
             $obsAluno = "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas.";
 
-            // Se o orientador forneceu observações qualitativas no relato, analisa menções ao aluno
+            // Se o orientador forneceu observações qualitativas no relato, analisa menções exclusivas a ESTE aluno
             if ($temContexto) {
                 $primeiroNome = explode(' ', $a['nome'])[0];
-                if (stripos($contextoProfessor, $primeiroNome) !== false || stripos($contextoProfessor, $a['nome']) !== false) {
-                    $obsAluno .= " Nota pedagógica baseada no relato do orientador: \"{$contextoProfessor}\".";
-                    if (preg_match('/(ausente|conflito|atraso|dificuldade|desatento|faltou)/i', $contextoProfessor)) {
+                // Dividir o texto do professor em frases separadas por . ; ou \n
+                $frases = preg_split('/[.;\n]+/', $contextoProfessor);
+                $frasesDoAluno = [];
+
+                foreach ($frases as $frase) {
+                    $fraseTrim = trim($frase);
+                    if (empty($fraseTrim)) continue;
+
+                    if (stripos($fraseTrim, $primeiroNome) !== false || stripos($fraseTrim, $a['nome']) !== false) {
+                        $frasesDoAluno[] = $fraseTrim;
+                    }
+                }
+
+                if (!empty($frasesDoAluno)) {
+                    $trechoExclusivo = implode('. ', $frasesDoAluno);
+                    $obsAluno .= " Parecer do orientador: \"{$trechoExclusivo}\".";
+
+                    if (preg_match('/(ausente|conflito|atraso|dificuldade|desatento|faltou)/i', $trechoExclusivo)) {
                         $notaPostura = max(5.0, $notaPostura - 1.5);
                         $notaRituais = max(5.0, $notaRituais - 1.0);
                     }
-                    if (preg_match('/(liderou|proativ|excelente|ajudou|dedicou|destacou)/i', $contextoProfessor)) {
+                    if (preg_match('/(liderou|proativ|excelente|ajudou|dedicou|destacou)/i', $trechoExclusivo)) {
                         $notaPostura = min(10.0, $notaPostura + 1.0);
                         $notaRituais = min(10.0, $notaRituais + 1.0);
                     }
