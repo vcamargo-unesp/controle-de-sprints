@@ -374,11 +374,43 @@ class GeminiAvaliacaoService
             }
         }
 
+        // Construir texto corrido e natural
         $papelStr = $aluno->papel ?? 'Integrante';
-        $listaTarefasStr = !empty($todasTarefas) ? implode(', ', array_slice($todasTarefas, 0, 3)) : 'atividades do backlog';
-        $obsStr = !empty($obsProf) ? ' Parecer do orientador: "' . implode('; ', $obsProf) . '".' : '';
+        $totalTarefas = count($todasTarefas);
+        $totalSprints = count($sprintsSanitizadas);
 
-        return "No {$bimestre}º Bimestre, {$aluno->nome} atuou como {$papelStr} da equipe. Foi responsável por {$listaTarefasStr}, totalizando {$totalConcluidas} entrega(s) concluída(s).{$obsStr}";
+        // Frase de abertura
+        $texto = "Durante o {$bimestre}º Bimestre, {$aluno->nome} exerceu o papel de {$papelStr} da equipe";
+        $texto .= $totalSprints > 0 ? ", participando de {$totalSprints} sprint(s). " : ". ";
+
+        // Frase sobre entregas (com nomes reais das tarefas)
+        if ($totalTarefas > 0) {
+            $nomesTarefas = array_map(function ($t) {
+                return $t;
+            }, array_slice($todasTarefas, 0, 3));
+            $listaNatural = implode(', ', $nomesTarefas);
+
+            if ($totalConcluidas === $totalTarefas) {
+                $texto .= "Entregou com sucesso todas as {$totalConcluidas} tarefa(s) sob sua responsabilidade: {$listaNatural}. ";
+            } elseif ($totalConcluidas > 0) {
+                $texto .= "Concluiu {$totalConcluidas} de {$totalTarefas} tarefa(s) atribuídas, incluindo {$listaNatural}. ";
+            } else {
+                $texto .= "Teve {$totalTarefas} tarefa(s) atribuída(s) — {$listaNatural} — porém nenhuma foi finalizada neste período. ";
+            }
+        } else {
+            $texto .= "Não teve tarefas diretamente atribuídas neste período, atuando em atividades de suporte à equipe. ";
+        }
+
+        // Frase de fechamento contextual
+        if ($totalConcluidas > 0 && $totalConcluidas === $totalTarefas) {
+            $texto .= "O aproveitamento integral das entregas demonstra comprometimento sólido com os prazos e objetivos da sprint.";
+        } elseif ($totalConcluidas > 0) {
+            $texto .= "Há espaço para evolução no cumprimento integral dos prazos e na finalização das entregas pendentes.";
+        } else {
+            $texto .= "Recomenda-se maior protagonismo na execução das tarefas e participação ativa nos rituais da equipe no próximo ciclo.";
+        }
+
+        return $texto;
     }
 
     /**
