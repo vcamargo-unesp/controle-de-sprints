@@ -120,7 +120,11 @@ class KanbanController extends Controller
         ])
         ->where('equipe_id', $equipeId)
         ->whereNotIn('id', function($query) {
-            $query->select('tarefa_id')->from('tarefa_colunas');
+            $query->select('tc.tarefa_id')
+                ->from('tarefa_colunas as tc')
+                ->join('col_sprints as cs', 'tc.colsprint_id', '=', 'cs.id')
+                ->join('sprints as s', 'cs.sprint_id', '=', 's.id')
+                ->where('s.encerrada', false);
         })
         ->get();
 
@@ -745,11 +749,9 @@ class KanbanController extends Controller
                 $this->registrarHistorico(
                     $tc->tarefa_id,
                     'transferencia_sprint',
-                    "Sprint {$sprintAtual->sequencia} encerrada com pendência: Tarefa devolvida automaticamente da Sprint {$sprintAtual->sequencia} para o Backlog."
+                    "Sprint {$sprintAtual->sequencia} encerrada com pendência: Tarefa mantida no histórico da Sprint {$sprintAtual->sequencia} e devolvida para o Backlog."
                 );
             }
-
-            TarefaColuna::whereIn('id', $tarefasNaoConcluidas->pluck('id'))->delete();
         });
 
         return back();
