@@ -49,4 +49,10 @@ Route::middleware(['session.auth'])->group(function () {
     Route::post('/equipes/{equipeId}/colunas', [KanbanController::class, 'criarColuna']);
     Route::post('/equipes/{equipeId}/colunas/reordenar', [KanbanController::class, 'reordenarColunas']);
     Route::delete('/equipes/{equipeId}/colunas/{colunaId}', [KanbanController::class, 'deletarColuna']);
+
+    // Painel de Notas & Resumos com IA
+    Route::get('/notas', [\App\Http\Controllers\NotasController::class, 'index'])->name('notas.index');
+    Route::post('/notas/pesos', [\App\Http\Controllers\NotasController::class, 'salvarPesos'])->name('notas.pesos');
+    Route::post('/notas/aluno/{alunoId}/resumo/{bimestre}', [\App\Http\Controllers\NotasController::class, 'gerarResumoGemini'])->name('notas.resumo');
+    Route::get('/minhas-notas', [\App\Http\Controllers\NotasController::class, 'minhasNotas'])->name('minhas.notas');
 });

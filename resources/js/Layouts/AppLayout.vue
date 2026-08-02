@@ -9,7 +9,9 @@ import {
   GraduationCap, 
   UserCheck, 
   LogOut,
-  ShieldAlert
+  ShieldAlert,
+  Calculator,
+  Award
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -57,14 +59,32 @@ const currentUserRole = computed(() => {
             </div>
           </div>
 
-          <!-- Links de Navegação Superior (Apenas se Professor) -->
-          <nav v-if="currentUserRole === 'professor'" class="hidden md:flex items-center space-x-1 text-sm font-medium">
+          <!-- Links de Navegação Superior -->
+          <nav class="hidden md:flex items-center space-x-1 text-sm font-medium">
             <Link 
               href="/equipes" 
               class="px-3 py-1.5 rounded text-slate-200 hover:text-white hover:bg-white/10 transition flex items-center space-x-1.5"
             >
               <LayoutDashboard class="w-4 h-4" />
               <span>Painel de Equipes</span>
+            </Link>
+
+            <Link 
+              v-if="currentUserRole === 'professor'"
+              href="/notas" 
+              class="px-3 py-1.5 rounded text-slate-200 hover:text-white hover:bg-white/10 transition flex items-center space-x-1.5"
+            >
+              <Calculator class="w-4 h-4" />
+              <span>Painel de Notas</span>
+            </Link>
+
+            <Link 
+              v-else
+              href="/minhas-notas" 
+              class="px-3 py-1.5 rounded text-slate-200 hover:text-white hover:bg-white/10 transition flex items-center space-x-1.5"
+            >
+              <Award class="w-4 h-4" />
+              <span>Minhas Notas</span>
             </Link>
           </nav>
 
@@ -90,11 +110,19 @@ const currentUserRole = computed(() => {
       </div>
     </header>
 
-    <!-- Sub-bar de Navegação para telas menores (Apenas se Professor) -->
-    <div v-if="currentUserRole === 'professor'" class="md:hidden bg-[#1A365D] border-b border-slate-700 px-4 py-2 flex items-center justify-around text-xs text-white">
+    <!-- Sub-bar de Navegação para telas menores -->
+    <div class="md:hidden bg-[#1A365D] border-b border-slate-700 px-4 py-2 flex items-center justify-around text-xs text-white">
       <Link href="/equipes" class="flex flex-col items-center">
         <LayoutDashboard class="w-4 h-4" />
-        <span>Painel de Equipes</span>
+        <span>Equipes</span>
+      </Link>
+      <Link v-if="currentUserRole === 'professor'" href="/notas" class="flex flex-col items-center">
+        <Calculator class="w-4 h-4" />
+        <span>Notas</span>
+      </Link>
+      <Link v-else href="/minhas-notas" class="flex flex-col items-center">
+        <Award class="w-4 h-4" />
+        <span>Minhas Notas</span>
       </Link>
     </div>
 
