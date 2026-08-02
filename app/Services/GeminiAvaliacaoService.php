@@ -233,12 +233,13 @@ class GeminiAvaliacaoService
         }
 
         // Fallback heurístico para garantir resposta imediata caso a API Gemini não responda
-        return $this->gerarAvaliacaoFallback($dadosAlunos, $percentualConclusao);
+        return $this->gerarAvaliacaoFallback($dadosAlunos, $percentualConclusao, $contextoProfessor);
     }
 
-    private function gerarAvaliacaoFallback(array $dadosAlunos, float $percentualConclusao): array
+    private function gerarAvaliacaoFallback(array $dadosAlunos, float $percentualConclusao, ?string $contextoProfessor = null): array
     {
         $baseNota = round(min(10.0, max(4.0, ($percentualConclusao / 10))), 1);
+        $temContexto = !empty(trim($contextoProfessor ?? ''));
 
         $avaliacoesIndividuais = [];
         foreach ($dadosAlunos as $a) {
@@ -249,14 +250,36 @@ class GeminiAvaliacaoService
 
             $notaRituais = round(min(10.0, max(6.0, 7.0 + ($totalInteracoes * 0.5))), 1);
             $notaPostura = 8.5;
+            $obsAluno = "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas.";
+
+            // Se o orientador forneceu observações qualitativas no relato, analisa menções ao aluno
+            if ($temContexto) {
+                $primeiroNome = explode(' ', $a['nome'])[0];
+                if (stripos($contextoProfessor, $primeiroNome) !== false || stripos($contextoProfessor, $a['nome']) !== false) {
+                    $obsAluno .= " Nota pedagógica baseada no relato do orientador: \"{$contextoProfessor}\".";
+                    if (preg_match('/(ausente|conflito|atraso|dificuldade|desatento|faltou)/i', $contextoProfessor)) {
+                        $notaPostura = max(5.0, $notaPostura - 1.5);
+                        $notaRituais = max(5.0, $notaRituais - 1.0);
+                    }
+                    if (preg_match('/(liderou|proativ|excelente|ajudou|dedicou|destacou)/i', $contextoProfessor)) {
+                        $notaPostura = min(10.0, $notaPostura + 1.0);
+                        $notaRituais = min(10.0, $notaRituais + 1.0);
+                    }
+                }
+            }
 
             $avaliacoesIndividuais[] = [
                 'aluno_id' => $a['aluno_id'],
                 'rituais' => $notaRituais,
                 'tarefas' => $notaTarefas,
                 'postura' => $notaPostura,
-                'observacoes' => "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas e registrou {$totalInteracoes} interações."
+                'observacoes' => $obsAluno
             ];
+        }
+
+        $obsGeral = "Sprint concluída com {$percentualConclusao}% das tarefas finalizadas.";
+        if ($temContexto) {
+            $obsGeral .= " Relato pedagógico do orientador: \"{$contextoProfessor}\".";
         }
 
         return [
@@ -264,7 +287,7 @@ class GeminiAvaliacaoService
             'qualidade_tecnica' => round(min(10.0, $baseNota + 0.5), 1),
             'processos_rituais' => round(min(10.0, $baseNota), 1),
             'documentacao' => round(min(10.0, $baseNota - 0.5), 1),
-            'observacoes' => "Sprint concluída com {$percentualConclusao}% das tarefas finalizadas.",
+            'observacoes' => $obsGeral,
             'avaliacoes_individuais' => $avaliacoesIndividuais
         ];
     }
