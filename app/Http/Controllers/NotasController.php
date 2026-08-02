@@ -239,8 +239,8 @@ class NotasController extends Controller
 
         $sprintsDetalhadas = $sprints->map(function ($s) use ($aluno) {
             return [
-                'sprint' => "Sprint {$s.sequencia}",
-                'percentual' => "{$s.percentual}%",
+                'sprint' => "Sprint {$s->sequencia}",
+                'percentual' => "{$s->percentual}%",
                 'feedback_professor' => $s->feedback,
                 'avaliacao_sprint' => $s->avaliacaoSprint ? [
                     'entrega_valor' => $s->avaliacaoSprint->entrega_valor,

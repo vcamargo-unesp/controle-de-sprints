@@ -294,8 +294,20 @@ class KanbanController extends Controller
         return back();
     }
 
+    private function tarefaEstaEmSprintEncerrada($tarefaId): bool
+    {
+        return TarefaColuna::join('sprints', 'tarefa_colunas.sprint_id', '=', 'sprints.id')
+            ->where('tarefa_colunas.tarefa_id', $tarefaId)
+            ->where('sprints.encerrada', true)
+            ->exists();
+    }
+
     public function editarTarefa(Request $request, $tarefaId)
     {
+        if ($this->tarefaEstaEmSprintEncerrada($tarefaId)) {
+            return back()->withErrors(['tarefa' => 'Esta tarefa pertence a uma Sprint encerrada e não pode ser editada.']);
+        }
+
         $request->validate([
             'titulo' => 'required|string|max:255',
             'descricao' => 'nullable|string'
@@ -332,6 +344,10 @@ class KanbanController extends Controller
 
     public function assumirTarefa(Request $request, $tarefaId)
     {
+        if ($this->tarefaEstaEmSprintEncerrada($tarefaId)) {
+            return back()->withErrors(['tarefa' => 'Esta tarefa pertence a uma Sprint encerrada e não pode ter seus responsáveis alterados.']);
+        }
+
         $tarefa = Tarefa::findOrFail($tarefaId);
         $alunoId = $request->input('aluno_id', session('user_id'));
 
@@ -360,6 +376,10 @@ class KanbanController extends Controller
 
     public function adicionarComentario(Request $request, $tarefaId)
     {
+        if ($this->tarefaEstaEmSprintEncerrada($tarefaId)) {
+            return back()->withErrors(['comentario' => 'Esta tarefa pertence a uma Sprint encerrada e não pode receber novos comentários.']);
+        }
+
         $request->validate(['texto' => 'required|string']);
 
         $role = session('user_type', 'aluno');
@@ -383,6 +403,10 @@ class KanbanController extends Controller
 
     public function adicionarAnexo(Request $request, $tarefaId)
     {
+        if ($this->tarefaEstaEmSprintEncerrada($tarefaId)) {
+            return back()->withErrors(['anexo' => 'Esta tarefa pertence a uma Sprint encerrada e não pode receber novos anexos.']);
+        }
+
         $request->validate([
             'arquivo' => 'required|file|max:10240'
         ]);
@@ -413,12 +437,16 @@ class KanbanController extends Controller
 
     public function editarComentario(Request $request, $comentarioId)
     {
+        $comentario = Comentario::findOrFail($comentarioId);
+
+        if ($this->tarefaEstaEmSprintEncerrada($comentario->tarefa_id)) {
+            return back()->withErrors(['comentario' => 'Esta tarefa pertence a uma Sprint encerrada e seus comentários não podem ser editados.']);
+        }
+
         $request->validate(['texto' => 'required|string']);
 
         $role = session('user_type', 'aluno');
         $userId = session('user_id');
-
-        $comentario = Comentario::findOrFail($comentarioId);
 
         // Verificar autoria
         if ($role === 'aluno' && $comentario->aluno_id != $userId) {
@@ -448,10 +476,14 @@ class KanbanController extends Controller
 
     public function deletarComentario(Request $request, $comentarioId)
     {
+        $comentario = Comentario::findOrFail($comentarioId);
+
+        if ($this->tarefaEstaEmSprintEncerrada($comentario->tarefa_id)) {
+            return back()->withErrors(['comentario' => 'Esta tarefa pertence a uma Sprint encerrada e seus comentários não podem ser removidos.']);
+        }
+
         $role = session('user_type', 'aluno');
         $userId = session('user_id');
-
-        $comentario = Comentario::findOrFail($comentarioId);
 
         // Verificar autoria
         if ($role === 'aluno' && $comentario->aluno_id != $userId) {
@@ -480,10 +512,14 @@ class KanbanController extends Controller
 
     public function deletarAnexo(Request $request, $anexoId)
     {
+        $anexo = Anexo::findOrFail($anexoId);
+
+        if ($this->tarefaEstaEmSprintEncerrada($anexo->tarefa_id)) {
+            return back()->withErrors(['anexo' => 'Esta tarefa pertence a uma Sprint encerrada e seus anexos não podem ser removidos.']);
+        }
+
         $role = session('user_type', 'aluno');
         $userId = session('user_id');
-
-        $anexo = Anexo::findOrFail($anexoId);
 
         // Verificar autoria
         if ($role === 'aluno' && $anexo->aluno_id != $userId) {

@@ -105,6 +105,10 @@ const isAutorAnexo = (a) => {
   return false;
 };
 
+const isTarefaBloqueada = computed(() => {
+  return props.sprint?.encerrada || props.sprint?.bloqueadaPorPrazo || props.abaAtiva === 'anteriores';
+});
+
 // Drag & Drop
 const draggedTaskId = ref(null);
 const hoverColuna = ref(null);
@@ -381,6 +385,7 @@ const deletarAnexo = (a) => {
 
 // ─── Tarefa (título/descrição) ─────────────────────────────────────────
 const salvarEdicaoTarefa = () => {
+  if (isTarefaBloqueada.value) return;
   if (!tarefaSelecionada.value || !tarefaSelecionada.value.titulo) return;
   router.post(`/kanban/editar-tarefa/${tarefaSelecionada.value.id}`, {
     titulo: tarefaSelecionada.value.titulo,
@@ -938,9 +943,10 @@ const parseDetalhes = (detalhes) => {
               v-model="tarefaSelecionada.titulo"
               @change="salvarEdicaoTarefa"
               @blur="salvarEdicaoTarefa"
+              :disabled="isTarefaBloqueada"
               type="text"
               placeholder="Título da Tarefa"
-              class="bg-white/10 hover:bg-white/20 focus:bg-white focus:text-slate-900 text-white font-bold text-sm px-2 py-1 rounded border border-white/20 focus:outline-none w-full transition"
+              class="bg-white/10 hover:bg-white/20 focus:bg-white focus:text-slate-900 text-white font-bold text-sm px-2 py-1 rounded border border-white/20 focus:outline-none w-full transition disabled:opacity-80 disabled:cursor-not-allowed"
             />
           </div>
           <button @click="modalTarefaAberto = false" class="text-slate-300 hover:text-white cursor-pointer shrink-0">
@@ -949,16 +955,23 @@ const parseDetalhes = (detalhes) => {
         </div>
 
         <div class="p-4 space-y-4 overflow-y-auto flex-1">
+          <!-- Banner de Bloqueio se Sprint Encerrada -->
+          <div v-if="isTarefaBloqueada" class="bg-amber-50 border border-amber-200 rounded p-2.5 text-xs text-amber-800 flex items-center space-x-2">
+            <Lock class="w-4 h-4 text-amber-600 shrink-0" />
+            <span><strong>Tarefa Congelada:</strong> Esta tarefa pertence a uma Sprint encerrada/histórica e está protegida contra alterações.</span>
+          </div>
+
           <!-- Descrição Editável -->
           <div>
-            <label class="block text-xs font-semibold text-slate-700 mb-1">Descrição (Editável)</label>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Descrição {{ isTarefaBloqueada ? '(Somente Leitura)' : '(Editável)' }}</label>
             <textarea 
               v-model="tarefaSelecionada.descricao"
               @change="salvarEdicaoTarefa"
               @blur="salvarEdicaoTarefa"
+              :disabled="isTarefaBloqueada"
               rows="3"
               placeholder="Digite os detalhes e orientações desta tarefa..."
-              class="w-full text-xs text-slate-800 bg-slate-50 p-2.5 rounded border border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500 focus:outline-none transition"
+              class="w-full text-xs text-slate-800 bg-slate-50 p-2.5 rounded border border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500 focus:outline-none transition disabled:bg-slate-100 disabled:cursor-not-allowed"
             ></textarea>
           </div>
 
@@ -979,9 +992,11 @@ const parseDetalhes = (detalhes) => {
               <button 
                 v-for="aluno in equipe.alunos" 
                 :key="aluno.id"
-                @click="assumirTarefa(aluno.id)"
+                @click="!isTarefaBloqueada && assumirTarefa(aluno.id)"
+                :disabled="isTarefaBloqueada"
                 :class="[
-                  'text-left text-xs px-2.5 py-1.5 rounded border transition flex items-center justify-between cursor-pointer select-none',
+                  'text-left text-xs px-2.5 py-1.5 rounded border transition flex items-center justify-between select-none',
+                  isTarefaBloqueada ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer',
                   tarefaSelecionada?.responsaveis?.some(r => r.id === aluno.id)
                     ? 'bg-[#0F2537] text-white border-[#0F2537] font-bold shadow-xs'
                     : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100 font-medium'
@@ -1016,8 +1031,8 @@ const parseDetalhes = (detalhes) => {
                   <span :class="c.is_professor ? 'text-amber-900' : 'text-slate-600'">
                     {{ c.autor_nome }} {{ c.is_professor ? '(Orientação do Professor)' : '' }}
                   </span>
-                  <!-- Ações do autor -->
-                  <div v-if="isAutorComentario(c)" class="flex items-center space-x-1">
+                  <!-- Ações do autor (ocultas se tarefa bloqueada) -->
+                  <div v-if="!isTarefaBloqueada && isAutorComentario(c)" class="flex items-center space-x-1">
                     <button
                       @click="iniciarEdicaoComentario(c)"
                       class="text-slate-400 hover:text-blue-600 transition cursor-pointer"
@@ -1057,7 +1072,8 @@ const parseDetalhes = (detalhes) => {
               </div>
             </div>
 
-            <div class="flex gap-2 pt-1">
+            <!-- Adicionar Comentário (Oculto se Tarefa Bloqueada) -->
+            <div v-if="!isTarefaBloqueada" class="flex gap-2 pt-1">
               <input 
                 v-model="novoComentarioText" 
                 type="text" 
@@ -1073,7 +1089,7 @@ const parseDetalhes = (detalhes) => {
             </div>
           </div>
 
-          <!-- Anexos Livres com Preservação do Nome Original -->
+          <!-- Anexos Livres -->
           <div class="border-t pt-3 space-y-2">
             <h4 class="text-xs font-bold text-slate-800 flex items-center space-x-1">
               <Paperclip class="w-3.5 h-3.5 text-slate-500" />
@@ -1086,7 +1102,7 @@ const parseDetalhes = (detalhes) => {
                 <div class="flex items-center space-x-2">
                   <span class="text-[10px] text-slate-500">{{ a.autor_nome }}</span>
                   <button
-                    v-if="isAutorAnexo(a)"
+                    v-if="!isTarefaBloqueada && isAutorAnexo(a)"
                     @click="deletarAnexo(a)"
                     class="text-slate-400 hover:text-red-600 transition cursor-pointer"
                     title="Remover anexo"
@@ -1097,7 +1113,8 @@ const parseDetalhes = (detalhes) => {
               </div>
             </div>
 
-            <div class="pt-1">
+            <!-- Adicionar Anexo (Oculto se Tarefa Bloqueada) -->
+            <div v-if="!isTarefaBloqueada" class="pt-1">
               <input 
                 ref="arquivoAnexoInput"
                 type="file" 
@@ -1119,6 +1136,7 @@ const parseDetalhes = (detalhes) => {
 
           <div class="flex items-center space-x-2">
             <button 
+              v-if="!isTarefaBloqueada"
               @click="salvarEdicaoTarefa" 
               class="px-3.5 py-1.5 rounded bg-[#0F2537] text-white text-xs font-semibold hover:bg-[#1A365D] transition cursor-pointer"
             >
