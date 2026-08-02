@@ -646,8 +646,8 @@ const parseDetalhes = (detalhes) => {
     <div v-if="abaAtiva === 'backlog'" class="bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden">
       <div class="bg-slate-50 border-b border-slate-200 p-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 class="text-sm font-bold text-slate-800">Backlog de Tarefas</h2>
-          <p class="text-xs text-slate-500">Tarefas não atribuídas a nenhuma Sprint. Apenas o PO/Professor pode criar e gerenciar.</p>
+          <h2 class="text-sm font-bold text-slate-800">Backlog da Equipe (Tarefas Pendentes)</h2>
+          <p class="text-xs text-slate-500">Tarefas não atribuídas a nenhuma Sprint. O PO e o Orientador criam tarefas; apenas o Orientador inicia uma Sprint.</p>
         </div>
 
         <div v-if="isPO || isOrientador" class="flex items-center space-x-2">
@@ -660,6 +660,7 @@ const parseDetalhes = (detalhes) => {
           </button>
 
           <button 
+            v-if="isOrientador"
             @click="iniciarNovaSprint"
             :disabled="tarefasSelecionadasBacklog.length === 0"
             class="bg-[#0F2537] hover:bg-[#1A365D] disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded shadow-sm transition flex items-center space-x-1 cursor-pointer"

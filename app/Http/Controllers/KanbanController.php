@@ -578,10 +578,9 @@ class KanbanController extends Controller
         $userId = session('user_id');
 
         $isOrientador = ($role === 'professor' && $userId == $equipe->prof_id);
-        $isPO = ($role === 'aluno' && $alunoPapel === 'PO');
 
-        if (!$isOrientador && !$isPO) {
-            return back()->withErrors(['sprint' => 'Apenas o orientador da equipe ou o Product Owner (PO) podem iniciar uma Sprint.']);
+        if (!$isOrientador) {
+            return back()->withErrors(['sprint' => 'Apenas o professor orientador da equipe pode iniciar uma nova Sprint.']);
         }
 
         $request->validate([
