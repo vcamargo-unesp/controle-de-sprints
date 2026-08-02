@@ -313,22 +313,26 @@ class GeminiAvaliacaoService
     public function gerarResumoAlunoBimestre(object $aluno, int $bimestre, array $sprintsDetalhadas): string
     {
         $apiKey = env('GEMINI_API_KEY');
+        $primeiroNome = explode(' ', $aluno->nome)[0];
+
+        // Sanitizar os dados ANTES de enviar ao Gemini: remover menções a outros alunos
+        $sprintsSanitizadas = $this->sanitizarSprintsParaAluno($sprintsDetalhadas, $aluno->nome, $primeiroNome);
 
         $prompt = "Atue como um orientador e coordenador pedagógico sênior de um colégio técnico de excelência.\n"
             . "Sua tarefa é escrever um parecer pedagógico HIPER-PERSONALIZADO, humano e analítico sobre o desempenho real do aluno durante o {$bimestre}º Bimestre.\n\n"
-            . "MUITO IMPORTANTE - REGRAS RÍGIDAS:\n"
-            . "1. NUNCA use frases genéricas ou clichês acadêmicos padrão (como 'mantendo boa dedicação aos rituais').\n"
-            . "2. Cite OBRIGATORIAMENTE o papel do aluno (" . ($aluno->papel ?? 'Integrante') . ") e cite os NOMES EXATOS das tarefas atribuídas a ele que constam no JSON fornecido.\n"
-            . "3. Analise as notas e observações comportamentais dadas pelo orientador (rituais, postura e tarefas) de forma direta.\n"
-            . "4. Estruture o texto em um parecer coeso de 3 a 5 frases fluidas destacando: Entregas Técnicas Específicas, Desempenho Atitudinal/Comportamental e Recomendação Prática de Desenvolvimento.\n\n"
+            . "REGRAS RÍGIDAS E INEGOCIÁVEIS:\n"
+            . "1. NUNCA use frases genéricas ou clichês acadêmicos padrão.\n"
+            . "2. Cite OBRIGATORIAMENTE o papel do aluno (" . ($aluno->papel ?? 'Integrante') . ") e os NOMES EXATOS das tarefas.\n"
+            . "3. REGRA DE PRIVACIDADE: Este parecer é EXCLUSIVAMENTE sobre o aluno {$aluno->nome}. NUNCA mencione nomes, condutas ou avaliações de outros colegas de equipe. Se os dados contiverem referências a outros alunos, IGNORE-AS completamente.\n"
+            . "4. Estruture o texto em 3 a 5 frases fluidas: Entregas Técnicas, Desempenho Atitudinal e Recomendação Prática.\n\n"
             . "Dados do Aluno:\n"
             . "Nome: {$aluno->nome}\n"
             . "Papel: " . ($aluno->papel ?? 'Integrante') . "\n"
-            . "Sprints & Tarefas do Bimestre: " . json_encode($sprintsDetalhadas, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            . "Sprints & Tarefas do Bimestre: " . json_encode($sprintsSanitizadas, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         if (!empty($apiKey) && $apiKey !== 'sua_chave_gerada_aqui') {
             try {
-                $result = Gemini::generativeModel('gemini-1.5-flash')->generateContent($prompt);
+                $result = Gemini::generativeModel('gemini-2.0-flash')->generateContent($prompt);
                 $text = trim($result->text());
                 if (!empty($text)) {
                     return $text;
@@ -337,7 +341,7 @@ class GeminiAvaliacaoService
                 Log::warning("Chamada Facade Gemini para resumo do aluno falhou: " . $e->getMessage());
                 try {
                     $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                        ->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}", [
+                        ->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={$apiKey}", [
                             'contents' => [['parts' => [['text' => $prompt]]]]
                         ]);
                     if ($response->successful()) {
@@ -358,7 +362,7 @@ class GeminiAvaliacaoService
         $obsProf = [];
         $totalConcluidas = 0;
 
-        foreach ($sprintsDetalhadas as $sp) {
+        foreach ($sprintsSanitizadas as $sp) {
             if (!empty($sp['tarefas_assumidas_pelo_aluno']) && is_array($sp['tarefas_assumidas_pelo_aluno'])) {
                 foreach ($sp['tarefas_assumidas_pelo_aluno'] as $t) {
                     $todasTarefas[] = "«{$t['titulo']}» (" . ($t['concluida'] ? 'Concluída' : 'Em andamento') . ")";
@@ -372,8 +376,67 @@ class GeminiAvaliacaoService
 
         $papelStr = $aluno->papel ?? 'Integrante';
         $listaTarefasStr = !empty($todasTarefas) ? implode(', ', array_slice($todasTarefas, 0, 3)) : 'atividades do backlog';
-        $obsStr = !empty($obsProf) ? ' Nota do orientador: "' . implode('; ', $obsProf) . '".' : '';
+        $obsStr = !empty($obsProf) ? ' Parecer do orientador: "' . implode('; ', $obsProf) . '".' : '';
 
-        return "No {$bimestre}º Bimestre, {$aluno->nome} atuou como {$papelStr} da equipe. Foi responsável por {$listaTarefasStr}, totalizando {$totalConcluidas} entrega(s) concluída(s).{$obsStr} Recomendação: Manter a consistência na atualização diária do quadro e focar na expansão das competências técnicas da equipe.";
+        return "No {$bimestre}º Bimestre, {$aluno->nome} atuou como {$papelStr} da equipe. Foi responsável por {$listaTarefasStr}, totalizando {$totalConcluidas} entrega(s) concluída(s).{$obsStr}";
+    }
+
+    /**
+     * Sanitiza os dados das sprints para remover qualquer menção a outros alunos,
+     * preservando apenas os trechos que dizem respeito ao aluno em questão.
+     */
+    private function sanitizarSprintsParaAluno(array $sprintsDetalhadas, string $nomeCompleto, string $primeiroNome): array
+    {
+        foreach ($sprintsDetalhadas as &$sp) {
+            // Sanitizar observações do professor na avaliação individual
+            if (!empty($sp['avaliacao_individual']['observacoes_professor'])) {
+                $sp['avaliacao_individual']['observacoes_professor'] = $this->extrairFrasesDoAluno(
+                    $sp['avaliacao_individual']['observacoes_professor'],
+                    $nomeCompleto,
+                    $primeiroNome
+                );
+            }
+            // Sanitizar observações gerais
+            if (!empty($sp['avaliacao_individual']['observacoes'])) {
+                $sp['avaliacao_individual']['observacoes'] = $this->extrairFrasesDoAluno(
+                    $sp['avaliacao_individual']['observacoes'],
+                    $nomeCompleto,
+                    $primeiroNome
+                );
+            }
+            // Sanitizar feedback geral do professor
+            if (!empty($sp['feedback_geral_professor'])) {
+                $sp['feedback_geral_professor'] = $this->extrairFrasesDoAluno(
+                    $sp['feedback_geral_professor'],
+                    $nomeCompleto,
+                    $primeiroNome
+                );
+            }
+        }
+        return $sprintsDetalhadas;
+    }
+
+    /**
+     * Extrai apenas as frases de um texto que mencionam o aluno especificado.
+     * Frases que mencionam outros nomes ou não mencionam ninguém são preservadas
+     * apenas se NÃO contiverem nomes próprios de terceiros.
+     */
+    private function extrairFrasesDoAluno(string $texto, string $nomeCompleto, string $primeiroNome): string
+    {
+        $frases = preg_split('/(?<=[.;!?])\s+|[\n]+/', $texto);
+        $resultado = [];
+
+        foreach ($frases as $frase) {
+            $fraseTrim = trim($frase);
+            if (empty($fraseTrim)) continue;
+
+            $mencionaAluno = (stripos($fraseTrim, $primeiroNome) !== false || stripos($fraseTrim, $nomeCompleto) !== false);
+
+            if ($mencionaAluno) {
+                $resultado[] = $fraseTrim;
+            }
+        }
+
+        return !empty($resultado) ? implode(' ', $resultado) : '';
     }
 }
