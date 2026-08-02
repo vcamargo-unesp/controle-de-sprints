@@ -113,18 +113,26 @@ class KanbanController extends Controller
             ->orderBy('sequencia', 'desc')
             ->first();
 
-        // 1. Aba Backlog
+        // 1. Aba Backlog (Apenas tarefas sem Sprint ativa e que NÃO foram concluídas na Sprint mais recente)
         $tarefasBacklogRaw = Tarefa::with([
             'responsaveis', 'comentarios.aluno', 'comentarios.professor',
             'anexos.aluno', 'anexos.professor', 'historicos.aluno', 'historicos.professor'
         ])
         ->where('equipe_id', $equipeId)
+        // Nao pode estar em nenhuma sprint ativa
         ->whereNotIn('id', function($query) {
             $query->select('tc.tarefa_id')
                 ->from('tarefa_colunas as tc')
                 ->join('col_sprints as cs', 'tc.colsprint_id', '=', 'cs.id')
                 ->join('sprints as s', 'cs.sprint_id', '=', 's.id')
                 ->where('s.encerrada', false);
+        })
+        // Na sprint mais recente em que participou, a coluna NAO pode ser concluida = true
+        ->whereNotIn('id', function($query) {
+            $query->select('sub.tarefa_id')
+                ->from(DB::raw('(SELECT tc2.tarefa_id, c2.concluido, ROW_NUMBER() OVER (PARTITION BY tc2.tarefa_id ORDER BY s2.sequencia DESC, tc2.id DESC) as rn FROM tarefa_colunas as tc2 JOIN col_sprints as cs2 ON tc2.colsprint_id = cs2.id JOIN sprints as s2 ON cs2.sprint_id = s2.id JOIN colunas as c2 ON cs2.coluna_id = c2.id) as sub'))
+                ->where('sub.rn', 1)
+                ->where('sub.concluido', true);
         })
         ->get();
 
