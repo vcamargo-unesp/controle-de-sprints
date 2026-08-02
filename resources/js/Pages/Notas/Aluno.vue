@@ -72,6 +72,14 @@ const getNotaBadgeClass = (nota) => {
           </div>
         </div>
       </div>
+      <!-- Aviso sobre pesos -->
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start space-x-2.5">
+        <Award class="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <p class="text-xs text-amber-800 leading-relaxed">
+          <strong>Observação:</strong> As notas exibidas aqui representam a média das Sprints em cada bimestre.
+          A nota final na média da disciplina pode ser diferente, pois cada professor aplica pesos/coeficientes próprios conforme os critérios da sua matéria.
+        </p>
+      </div>
 
       <!-- Grid de Cartões por Bimestre -->
       <div class="space-y-4">
@@ -95,10 +103,7 @@ const getNotaBadgeClass = (nota) => {
                   {{ bData.bimestre }}º Bimestre Letivo
                 </h3>
                 <span class="text-xs text-slate-500">
-                  Peso/Coeficiente na disciplina: <strong>Peso {{ bData.peso }}</strong>
-                  <span v-if="bData.media_consolidada !== null" class="ml-1 text-slate-700 font-mono">
-                    (Contribuição: ({{ bData.media_consolidada }} × {{ bData.peso }}) / 10 = <strong class="text-emerald-700">+{{ ((bData.media_consolidada * bData.peso) / 10).toFixed(2) }} pts</strong> na disciplina)
-                  </span>
+                  {{ bData.sprints ? bData.sprints.length : 0 }} sprint(s) encerrada(s) neste bimestre
                 </span>
               </div>
             </div>
