@@ -52,17 +52,43 @@ const editEquipeUrl = ref('');
 const editEquipeGithub = ref('');
 const editEquipeProfId = ref('');
 
-// Filtro de Turma
+// Filtro de Turma e Ano
 const turmaFiltro = ref('todas');
+const mostrarAnosAnteriores = ref(false);
 
-const turmasDisponiveis = computed(() => {
-  const setTurmas = new Set(props.equipes.map(e => e.turma || '3A'));
+const anoAtual = computed(() => {
+  if (!props.equipes || props.equipes.length === 0) return new Date().getFullYear();
+  return Math.max(...props.equipes.map(e => Number(e.ano)));
+});
+
+const turmasAnoAtual = computed(() => {
+  const equipesAno = props.equipes.filter(e => Number(e.ano) === anoAtual.value);
+  const setTurmas = new Set(equipesAno.map(e => e.turma || '3A'));
+  return Array.from(setTurmas).sort();
+});
+
+const turmasAnosAnteriores = computed(() => {
+  const equipesAnteriores = props.equipes.filter(e => Number(e.ano) < anoAtual.value);
+  const setTurmas = new Set(equipesAnteriores.map(e => `${e.ano} - Turma ${e.turma}`));
   return Array.from(setTurmas).sort();
 });
 
 const equipesFiltradas = computed(() => {
-  if (turmaFiltro.value === 'todas') return props.equipes;
-  return props.equipes.filter(e => (e.turma || '3A') === turmaFiltro.value);
+  let resultado = props.equipes;
+
+  if (!mostrarAnosAnteriores.value) {
+    // Por padrao, mostra apenas equipes do Ano Atual
+    resultado = resultado.filter(e => Number(e.ano) === anoAtual.value);
+  } else if (turmaFiltro.value.includes(' - Turma ')) {
+    const [ano, turma] = turmaFiltro.value.split(' - Turma ');
+    return resultado.filter(e => Number(e.ano) === Number(ano) && (e.turma || '3A') === turma);
+  }
+
+  if (turmaFiltro.value !== 'todas' && !turmaFiltro.value.includes(' - Turma ')) {
+    resultado = resultado.filter(e => (e.turma || '3A') === turmaFiltro.value);
+  }
+
+  return resultado;
 });
 
 const abrirModalEdicao = (equipe) => {
@@ -161,17 +187,45 @@ const submeterImportacao = (event) => {
           <p class="text-xs text-slate-500">Lista ordenada por ano mais recente e ordem alfabética da equipe.</p>
         </div>
 
-        <div class="flex items-center space-x-2">
-          <!-- Filtro por Turma -->
-          <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded border border-slate-300">
-            <Filter class="w-3.5 h-3.5 text-slate-500 ml-1" />
-            <select v-model="turmaFiltro" class="text-xs font-bold text-slate-700 bg-transparent focus:outline-none cursor-pointer pr-1">
-              <option value="todas">Todas as Turmas</option>
-              <option v-for="t in turmasDisponiveis" :key="t" :value="t">
-                Turma {{ t }}
-              </option>
-            </select>
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Botões expostos apenas para o Ano Atual -->
+          <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded-md border border-slate-300">
+            <span class="text-[11px] font-bold text-slate-600 px-1">Ano {{ anoAtual }}:</span>
+            <button
+              @click="turmaFiltro = 'todas'"
+              :class="[
+                'px-2 py-0.5 rounded text-xs font-bold transition cursor-pointer',
+                turmaFiltro === 'todas' ? 'bg-[#0F2537] text-white' : 'text-slate-700 hover:bg-slate-200'
+              ]"
+            >
+              Todas
+            </button>
+            <button
+              v-for="t in turmasAnoAtual"
+              :key="t"
+              @click="turmaFiltro = t"
+              :class="[
+                'px-2 py-0.5 rounded text-xs font-bold transition cursor-pointer',
+                turmaFiltro === t ? 'bg-[#0F2537] text-white' : 'text-slate-700 hover:bg-slate-200'
+              ]"
+            >
+              {{ t }}
+            </button>
           </div>
+
+          <!-- Botão expansível para Anos Anteriores -->
+          <button
+            @click="mostrarAnosAnteriores = !mostrarAnosAnteriores"
+            :class="[
+              'px-2.5 py-1.5 rounded text-xs font-bold transition cursor-pointer flex items-center space-x-1 border',
+              mostrarAnosAnteriores
+                ? 'bg-amber-700 text-white border-amber-800'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300'
+            ]"
+          >
+            <History class="w-3.5 h-3.5" />
+            <span>Anos Anteriores</span>
+          </button>
 
           <button 
             @click="modalNovaEquipeAberto = true"

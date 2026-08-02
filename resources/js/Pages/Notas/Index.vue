@@ -15,9 +15,11 @@ import {
   CheckCircle2, 
   FileText, 
   ChevronRight,
+  ChevronDown,
   RefreshCw,
   Clock,
-  User
+  User,
+  History
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -27,12 +29,28 @@ const props = defineProps({
   alunosNotas: Array
 });
 
+// Controle de Turmas e Anos
+const mostrarAnosAnteriores = ref(false);
+
+const anoAtual = computed(() => {
+  if (!props.turmasAtivas || props.turmasAtivas.length === 0) return new Date().getFullYear();
+  return Math.max(...props.turmasAtivas.map(t => Number(t.ano)));
+});
+
+const turmasAnoAtual = computed(() => {
+  return props.turmasAtivas.filter(t => Number(t.ano) === anoAtual.value);
+});
+
+const turmasAnosAnteriores = computed(() => {
+  return props.turmasAtivas.filter(t => Number(t.ano) < anoAtual.value);
+});
+
 // Estado reativo dos pesos (para cálculo instantâneo em tela)
 const pesosInput = ref({
-  1: props.pesos[1] || 25,
-  2: props.pesos[2] || 25,
-  3: props.pesos[3] || 25,
-  4: props.pesos[4] || 25,
+  1: props.pesos[1] || 1,
+  2: props.pesos[2] || 1,
+  3: props.pesos[3] || 1,
+  4: props.pesos[4] || 1,
 });
 
 const salvandoPesos = ref(false);
@@ -149,23 +167,56 @@ const getBadgeNotaClass = (nota) => {
           </h1>
         </div>
 
-        <!-- Seletor de Turma -->
-        <div class="flex items-center space-x-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-2xs">
-          <span class="text-xs font-bold text-slate-600 px-2">Turma:</span>
-          <div class="flex flex-wrap gap-1">
+        <!-- Seletor de Turma por Ano -->
+        <div class="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-lg border border-slate-200 shadow-2xs">
+          <span class="text-xs font-bold text-slate-600 px-2">Turmas {{ anoAtual }}:</span>
+          
+          <!-- Botões expostos apenas do Ano Atual -->
+          <button
+            v-for="t in turmasAnoAtual"
+            :key="t.ano + '-' + t.turma"
+            @click="selecionarTurma(t)"
+            :class="[
+              'px-3 py-1 rounded text-xs font-bold transition cursor-pointer',
+              turmaSelecionada.ano == t.ano && turmaSelecionada.turma == t.turma
+                ? 'bg-[#0F2537] text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            ]"
+          >
+            Turma {{ t.turma }}
+          </button>
+
+          <!-- Botão expansível para Anos Anteriores -->
+          <div v-if="turmasAnosAnteriores.length > 0" class="relative">
             <button
-              v-for="t in turmasAtivas"
-              :key="t.ano + '-' + t.turma"
-              @click="selecionarTurma(t)"
+              @click="mostrarAnosAnteriores = !mostrarAnosAnteriores"
               :class="[
-                'px-3 py-1 rounded text-xs font-bold transition cursor-pointer',
-                turmaSelecionada.ano === t.ano && turmaSelecionada.turma === t.turma
-                  ? 'bg-[#0F2537] text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                'px-3 py-1 rounded text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border',
+                turmaSelecionada.ano < anoAtual
+                  ? 'bg-amber-700 text-white border-amber-800'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300'
               ]"
             >
-              {{ t.ano }} - {{ t.turma }}
+              <History class="w-3.5 h-3.5" />
+              <span>Anos Anteriores</span>
+              <ChevronDown class="w-3.5 h-3.5" />
             </button>
+
+            <!-- Dropdown das Turmas de Anos Anteriores -->
+            <div
+              v-if="mostrarAnosAnteriores"
+              class="absolute right-0 mt-1.5 w-48 bg-white rounded-md border border-slate-200 shadow-lg z-50 p-1 space-y-1"
+            >
+              <button
+                v-for="t in turmasAnosAnteriores"
+                :key="t.ano + '-' + t.turma"
+                @click="selecionarTurma(t); mostrarAnosAnteriores = false;"
+                class="w-full text-left px-3 py-1.5 text-xs rounded font-medium hover:bg-slate-100 transition flex justify-between items-center"
+              >
+                <span>{{ t.ano }} &bull; Turma {{ t.turma }}</span>
+                <span v-if="turmaSelecionada.ano == t.ano && turmaSelecionada.turma == t.turma" class="text-emerald-600 font-bold">✓</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
