@@ -212,17 +212,17 @@ class NotasController extends Controller
         $aluno = Aluno::with('equipe')->findOrFail($alunoId);
         $regerar = $request->boolean('regerar', false);
 
-        if (!$regerar) {
-            $existente = ResumoGemini::where('aluno_id', $alunoId)
-                ->where('bimestre', $bimestre)
-                ->first();
+        $existente = ResumoGemini::where('aluno_id', $alunoId)
+            ->where('bimestre', $bimestre)
+            ->first();
 
-            if ($existente && !empty($existente->texto_resumo)) {
-                return response()->json([
-                    'texto_resumo' => $existente->texto_resumo,
-                    'is_cached' => true
-                ]);
-            }
+        if (!$regerar && $existente && !empty($existente->texto_resumo)) {
+            return response()->json([
+                'texto_resumo' => $existente->texto_resumo,
+                'aprovado' => (bool)$existente->aprovado,
+                'texto_editado' => $existente->texto_editado,
+                'is_cached' => true
+            ]);
         }
 
         // Busca sprints do bimestre do aluno
@@ -288,14 +288,49 @@ class NotasController extends Controller
 
         $textoResumo = $geminiService->gerarResumoAlunoBimestre($aluno, (int)$bimestre, $sprintsDetalhadas);
 
-        ResumoGemini::updateOrCreate(
+        $resumoRecord = ResumoGemini::updateOrCreate(
             ['aluno_id' => $alunoId, 'bimestre' => (int)$bimestre],
-            ['texto_resumo' => $textoResumo]
+            [
+                'texto_resumo' => $textoResumo,
+                'aprovado' => false,
+                'texto_editado' => null,
+                'aprovado_em' => null
+            ]
         );
 
         return response()->json([
-            'texto_resumo' => $textoResumo,
+            'texto_resumo' => $resumoRecord->texto_resumo,
+            'aprovado' => false,
+            'texto_editado' => null,
             'is_cached' => false
+        ]);
+    }
+
+    /**
+     * Endpoint do Professor: Aprovar e/ou alterar o resumo do aluno pelo professor
+     */
+    public function aprovarResumoGemini(Request $request, $alunoId, $bimestre)
+    {
+        $request->validate([
+            'texto_editado' => 'nullable|string',
+            'aprovado' => 'required|boolean'
+        ]);
+
+        $resumo = ResumoGemini::where('aluno_id', $alunoId)
+            ->where('bimestre', $bimestre)
+            ->firstOrFail();
+
+        $resumo->update([
+            'aprovado' => $request->boolean('aprovado'),
+            'texto_editado' => $request->input('texto_editado'),
+            'aprovado_em' => $request->boolean('aprovado') ? now() : null
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'aprovado' => $resumo->aprovado,
+            'texto_editado' => $resumo->texto_editado,
+            'texto_final' => $resumo->texto_editado ?: $resumo->texto_resumo
         ]);
     }
 
@@ -332,10 +367,16 @@ class NotasController extends Controller
             ->orderBy('sequencia', 'asc')
             ->get();
 
-        // Resumos gravados da IA Gemini por bimestre
-        $resumosIa = ResumoGemini::where('aluno_id', $alunoId)
-            ->pluck('texto_resumo', 'bimestre')
-            ->toArray();
+        // APENAS resumos APROVADOS pelo professor repassados ao aluno
+        $resumosDb = ResumoGemini::where('aluno_id', $alunoId)
+            ->where('aprovado', true)
+            ->get()
+            ->keyBy('bimestre');
+
+        $resumosIa = [];
+        foreach ($resumosDb as $b => $r) {
+            $resumosIa[$b] = $r->texto_editado ?: $r->texto_resumo;
+        }
 
         $bimestresDados = [];
 

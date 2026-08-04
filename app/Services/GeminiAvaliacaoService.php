@@ -318,13 +318,26 @@ class GeminiAvaliacaoService
         // Sanitizar os dados ANTES de enviar ao Gemini: remover menções a outros alunos
         $sprintsSanitizadas = $this->sanitizarSprintsParaAluno($sprintsDetalhadas, $aluno->nome, $primeiroNome);
 
+        // Buscar resumos anteriores aprovados pelo professor (para treinamento de poucas amostras / few-shot learning)
+        $exemplosAprovados = \App\Models\ResumoGemini::where('aprovado', true)
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(fn($r) => "- Parecer Aprovado: \"" . ($r->texto_editado ?: $r->texto_resumo) . "\"")
+            ->implode("\n");
+
+        $promptExemplos = !empty($exemplosAprovados)
+            ? "\n\nEXEMPLOS DE RESUMOS ANTERIORES JÁ REVISADOS E APROVADOS PELO PROFESSOR (Use como modelo de estilo, tom pedagógico e estrutura):\n" . $exemplosAprovados . "\n"
+            : "";
+
         $prompt = "Atue como um orientador e coordenador pedagógico sênior de um colégio técnico de excelência.\n"
             . "Sua tarefa é escrever um parecer pedagógico HIPER-PERSONALIZADO, humano e analítico sobre o desempenho real do aluno durante o {$bimestre}º Bimestre.\n\n"
             . "REGRAS RÍGIDAS E INEGOCIÁVEIS:\n"
             . "1. NUNCA use frases genéricas ou clichês acadêmicos padrão.\n"
             . "2. Cite OBRIGATORIAMENTE o papel do aluno (" . ($aluno->papel ?? 'Integrante') . ") e os NOMES EXATOS das tarefas.\n"
             . "3. REGRA DE PRIVACIDADE: Este parecer é EXCLUSIVAMENTE sobre o aluno {$aluno->nome}. NUNCA mencione nomes, condutas ou avaliações de outros colegas de equipe. Se os dados contiverem referências a outros alunos, IGNORE-AS completamente.\n"
-            . "4. Estruture o texto em 3 a 5 frases fluidas: Entregas Técnicas, Desempenho Atitudinal e Recomendação Prática.\n\n"
+            . "4. Estruture o texto em 3 a 5 frases fluidas: Entregas Técnicas, Desempenho Atitudinal e Recomendação Prática."
+            . $promptExemplos . "\n\n"
             . "Dados do Aluno:\n"
             . "Nome: {$aluno->nome}\n"
             . "Papel: " . ($aluno->papel ?? 'Integrante') . "\n"

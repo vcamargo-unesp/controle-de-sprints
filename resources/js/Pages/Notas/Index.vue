@@ -19,7 +19,9 @@ import {
   RefreshCw,
   Clock,
   User,
-  History
+  History,
+  Check,
+  Edit3
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -107,19 +109,29 @@ const modalRaioXAberto = ref(false);
 const alunoSelecionado = ref(null);
 const bimestreSelecionadoRaioX = ref(1);
 const resumoGeminiTexto = ref('');
+const resumoGeminiOriginal = ref('');
+const resumoGeminiEditado = ref('');
+const resumoAprovado = ref(false);
+const editandoResumo = ref(false);
 const carregandoResumoGemini = ref(false);
+const salvandoAprovacao = ref(false);
 
 const abrirRaioX = async (aluno, bimestre) => {
   alunoSelecionado.value = aluno;
   bimestreSelecionadoRaioX.value = bimestre;
   modalRaioXAberto.value = true;
   resumoGeminiTexto.value = '';
+  resumoGeminiOriginal.value = '';
+  resumoGeminiEditado.value = '';
+  resumoAprovado.value = false;
+  editandoResumo.value = false;
 
   await carregarResumoGemini(aluno.id, bimestre, false);
 };
 
 const carregarResumoGemini = async (alunoId, bimestre, regerar = false) => {
   carregandoResumoGemini.value = true;
+  editandoResumo.value = false;
   try {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const res = await fetch(`/notas/aluno/${alunoId}/resumo/${bimestre}`, {
@@ -133,12 +145,43 @@ const carregarResumoGemini = async (alunoId, bimestre, regerar = false) => {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    resumoGeminiTexto.value = data.texto_resumo || 'Nenhum resumo gerado.';
+    resumoGeminiOriginal.value = data.texto_resumo || '';
+    resumoGeminiEditado.value = data.texto_editado || data.texto_resumo || '';
+    resumoGeminiTexto.value = data.texto_editado || data.texto_resumo || 'Nenhum resumo gerado.';
+    resumoAprovado.value = !!data.aprovado;
   } catch (e) {
     console.error("Erro ao carregar resumo do Gemini:", e);
     resumoGeminiTexto.value = "Não foi possível carregar a síntese pedagógica no momento.";
   } finally {
     carregandoResumoGemini.value = false;
+  }
+};
+
+const aprovarResumo = async (aprovadoStatus) => {
+  salvandoAprovacao.value = true;
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const res = await fetch(`/notas/aluno/${alunoSelecionado.value.id}/resumo/${bimestreSelecionadoRaioX.value}/aprovar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        aprovado: aprovadoStatus,
+        texto_editado: resumoGeminiEditado.value
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    resumoAprovado.value = data.aprovado;
+    resumoGeminiTexto.value = data.texto_final;
+    editandoResumo.value = false;
+  } catch (e) {
+    console.error("Erro ao aprovar resumo:", e);
+  } finally {
+    salvandoAprovacao.value = false;
   }
 };
 
@@ -359,21 +402,45 @@ const getBadgeNotaClass = (nota) => {
         <!-- Conteúdo Scrollável -->
         <div class="p-6 space-y-6 overflow-y-auto flex-1 bg-slate-50/50">
           
-          <!-- Bloco 1: Síntese Pedagógica Gerada pelo Gemini AI -->
+          <!-- Bloco 1: Síntese Pedagógica Gerada pelo Gemini AI (com aprovação e edição do professor) -->
           <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-xl p-5 text-white shadow-lg space-y-3">
             <div class="flex justify-between items-center border-b border-purple-800/60 pb-2.5">
-              <h4 class="text-xs font-extrabold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
-                <Sparkles class="w-4 h-4 text-amber-300 animate-pulse" />
-                <span>Síntese Analítica do Gemini AI</span>
-              </h4>
-              <button
-                @click="carregarResumoGemini(alunoSelecionado.id, bimestreSelecionadoRaioX, true)"
-                :disabled="carregandoResumoGemini"
-                class="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-purple-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw :class="['w-3 h-3', carregandoResumoGemini ? 'animate-spin' : '']" />
-                <span>Regerar IA</span>
-              </button>
+              <div class="flex items-center space-x-2">
+                <h4 class="text-xs font-extrabold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
+                  <Sparkles class="w-4 h-4 text-amber-300 animate-pulse" />
+                  <span>Síntese Analítica do Gemini AI</span>
+                </h4>
+                <span 
+                  :class="[
+                    'text-[10px] font-extrabold px-2 py-0.5 rounded border',
+                    resumoAprovado 
+                      ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300' 
+                      : 'bg-amber-500/20 border-amber-400/40 text-amber-300'
+                  ]"
+                >
+                  {{ resumoAprovado ? '✓ Aprovado pelo Professor' : 'Pendendo Aprovação' }}
+                </span>
+              </div>
+
+              <div class="flex items-center space-x-1.5">
+                <button
+                  v-if="!editandoResumo && !carregandoResumoGemini"
+                  @click="editandoResumo = true"
+                  class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-purple-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                  title="Editar texto do resumo"
+                >
+                  <Edit3 class="w-3 h-3" />
+                  <span>Editar</span>
+                </button>
+                <button
+                  @click="carregarResumoGemini(alunoSelecionado.id, bimestreSelecionadoRaioX, true)"
+                  :disabled="carregandoResumoGemini || salvandoAprovacao"
+                  class="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-purple-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw :class="['w-3 h-3', carregandoResumoGemini ? 'animate-spin' : '']" />
+                  <span>Regerar IA</span>
+                </button>
+              </div>
             </div>
 
             <div v-if="carregandoResumoGemini" class="py-4 text-center text-xs text-purple-200/80 flex items-center justify-center space-x-2">
@@ -381,9 +448,64 @@ const getBadgeNotaClass = (nota) => {
               <span>Analisando histórico e compilando observações do aluno...</span>
             </div>
 
-            <p v-else class="text-xs text-purple-100 leading-relaxed font-sans italic">
-              "{{ resumoGeminiTexto }}"
-            </p>
+            <div v-else-if="editandoResumo" class="space-y-3">
+              <textarea
+                v-model="resumoGeminiEditado"
+                rows="4"
+                class="w-full text-xs bg-slate-900/80 text-purple-100 border border-purple-400/40 rounded-lg p-3 font-sans focus:outline-none focus:border-amber-400 transition"
+                placeholder="Ajuste a redação pedagógica do resumo aqui..."
+              ></textarea>
+              <div class="flex justify-end space-x-2">
+                <button
+                  @click="editandoResumo = false; resumoGeminiEditado = resumoGeminiTexto"
+                  class="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  @click="aprovarResumo(true)"
+                  :disabled="salvandoAprovacao"
+                  class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Loader2 v-if="salvandoAprovacao" class="w-3 h-3 animate-spin" />
+                  <Check v-else class="w-3 h-3" />
+                  <span>Salvar & Aprovar</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-else class="space-y-3">
+              <p class="text-xs text-purple-100 leading-relaxed font-sans italic">
+                "{{ resumoGeminiTexto }}"
+              </p>
+
+              <!-- Barra de ações de aprovação do professor -->
+              <div class="pt-2 border-t border-purple-800/40 flex justify-between items-center text-xs">
+                <span class="text-[11px] text-purple-300">
+                  {{ resumoAprovado ? 'Visível para o aluno no painel.' : 'Alunos só verão este resumo após aprovação.' }}
+                </span>
+                <div class="flex items-center space-x-2">
+                  <button
+                    v-if="resumoAprovado"
+                    @click="aprovarResumo(false)"
+                    :disabled="salvandoAprovacao"
+                    class="px-3 py-1 rounded bg-amber-500/20 border border-amber-400/40 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] transition cursor-pointer disabled:opacity-50"
+                  >
+                    Desaprovar
+                  </button>
+                  <button
+                    v-else
+                    @click="aprovarResumo(true)"
+                    :disabled="salvandoAprovacao"
+                    class="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-[11px] transition flex items-center space-x-1.5 cursor-pointer shadow-md disabled:opacity-50"
+                  >
+                    <Loader2 v-if="salvandoAprovacao" class="w-3 h-3 animate-spin" />
+                    <Check v-else class="w-3.5 h-3.5" />
+                    <span>Aprovar para o Aluno</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Bloco 2: Média do Bimestre e Resumo das Sprints -->

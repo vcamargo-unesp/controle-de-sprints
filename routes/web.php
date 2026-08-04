@@ -54,5 +54,6 @@ Route::middleware(['session.auth'])->group(function () {
     Route::get('/notas', [\App\Http\Controllers\NotasController::class, 'index'])->name('notas.index');
     Route::post('/notas/pesos', [\App\Http\Controllers\NotasController::class, 'salvarPesos'])->name('notas.pesos');
     Route::post('/notas/aluno/{alunoId}/resumo/{bimestre}', [\App\Http\Controllers\NotasController::class, 'gerarResumoGemini'])->name('notas.resumo');
+    Route::post('/notas/aluno/{alunoId}/resumo/{bimestre}/aprovar', [\App\Http\Controllers\NotasController::class, 'aprovarResumoGemini'])->name('notas.aprovar-resumo');
     Route::get('/minhas-notas', [\App\Http\Controllers\NotasController::class, 'minhasNotas'])->name('minhas.notas');
 });

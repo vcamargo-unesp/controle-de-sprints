@@ -8,7 +8,7 @@ import {
   Calendar, 
   ChevronDown, 
   ChevronUp, 
-  Sparkles, 
+  UserCheck, 
   CheckCircle2, 
   User, 
   Users, 
@@ -130,13 +130,13 @@ const getNotaBadgeClass = (nota) => {
           <!-- Corpo Expansível (Accordion) do Bimestre -->
           <div v-if="bimestresAbertos[bData.bimestre]" class="p-5 space-y-4 bg-white">
             
-            <!-- Resumo IA Gemini se houver -->
-            <div v-if="bData.resumo_ia" class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-lg p-4 text-white shadow-xs space-y-2">
-              <h4 class="text-xs font-extrabold uppercase tracking-wider text-purple-200 flex items-center space-x-1.5">
-                <Sparkles class="w-4 h-4 text-amber-300" />
-                <span>Parecer Sintético da Inteligência Artificial</span>
+            <!-- Parecer Pedagógico Aprovado pelo Professor -->
+            <div v-if="bData.resumo_ia" class="bg-slate-900 rounded-lg p-4 text-white shadow-xs space-y-2 border border-slate-800">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center space-x-1.5">
+                <UserCheck class="w-4 h-4 text-emerald-400" />
+                <span>Parecer Pedagógico</span>
               </h4>
-              <p class="text-xs text-purple-100 leading-relaxed italic">
+              <p class="text-xs text-slate-200 leading-relaxed font-sans">
                 "{{ bData.resumo_ia }}"
               </p>
             </div>

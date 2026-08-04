@@ -12,6 +12,14 @@ class ResumoGemini extends Model
         'aluno_id',
         'bimestre',
         'texto_resumo',
+        'aprovado',
+        'texto_editado',
+        'aprovado_em',
+    ];
+
+    protected $casts = [
+        'aprovado' => 'boolean',
+        'aprovado_em' => 'datetime',
     ];
 
     public function aluno()
