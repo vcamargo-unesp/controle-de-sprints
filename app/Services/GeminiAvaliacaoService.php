@@ -167,27 +167,30 @@ class GeminiAvaliacaoService
     {
         $apiKey = env('GEMINI_API_KEY');
 
-        $systemPrompt = "Atue como um assistente de avaliação técnica e pedagógica para um colégio técnico. "
-            . "Analise os dados reais de desempenho de uma Sprint e leve em consideração OBRIGATORIAMENTE o relato contextual do professor orientador sobre relacionamento interpessoal, comportamento em sala de aula e dinâmica de equipe fornecido a seguir.\n"
-            . "REGRA RÍGIDA DE PRIVACIDADE: Nas observações individuais dos alunos ('avaliacoes_individuais'), inclua APENAS apontamentos e feedbacks referentes especificamente àquele aluno. NUNCA cite nomes, atitudes ou falhas de outros colegas de equipe dentro da observação individual de um estudante.\n\n"
-            . "Retorne EXCLUSIVAMENTE um objeto JSON válido, sem formatação markdown ou textos adicionais fora do JSON, contendo a seguinte estrutura exata:\n"
+        $systemPrompt = "Atue como um especialista em avaliação técnica e pedagógica para um colégio técnico secundário.\n"
+            . "Você deve analisar os dados de desempenho da Sprint E SEGUIR ESTRITAMENTE as instruções e observações qualitativas fornecidas pelo professor orientador no campo 'relato_qualitativo_do_professor'.\n\n"
+            . "DIRETRIZES OBRIGATÓRIAS PARA AS NOTAS E RESUMOS:\n"
+            . "1. O relato do professor orientador tem PRIORIDADE MÁXIMA na determinação das notas (especialmente de Postura, Rituais e Notas Globais). Se o professor relatar que um aluno/equipe merece nota baixa, redução de nota, ou apontar problemas (como faltas, conflitos, desatenção, falta de empenho), você DEVE REDUZIR a nota do aluno/equipe de acordo com a gravidade informada pelo professor.\n"
+            . "2. Da mesma forma, se o professor elogiar ou pedir nota alta/bônus para um aluno ou a equipe, você DEVE AUMENTAR a nota correspondente.\n"
+            . "3. REGRA RÍGIDA DE PRIVACIDADE: Nas observações individuais dos alunos ('avaliacoes_individuais'), inclua APENAS apontamentos e feedbacks referentes especificamente àquele aluno. NUNCA cite nomes, atitudes ou falhas de outros colegas de equipe dentro da observação individual de um estudante.\n\n"
+            . "Retorne EXCLUSIVAMENTE um objeto JSON válido, sem qualquer marcação de markdown (sem ```json), contendo a seguinte estrutura:\n"
             . "{\n"
-            . '  "entrega_valor": number, // nota de 0.0 a 10.0 baseada em % de conclusao e entregas' . "\n"
+            . '  "entrega_valor": number, // nota de 0.0 a 10.0' . "\n"
             . '  "qualidade_tecnica": number, // nota de 0.0 a 10.0' . "\n"
-            . '  "processos_rituais": number, // nota de 0.0 a 10.0 baseada na organizacao e comentarios' . "\n"
-            . '  "documentacao": number, // nota de 0.0 a 10.0 baseada nos anexos e especificacoes' . "\n"
-            . '  "observacoes": "string explicativa sintetizando os pontos fortes e fracos da sprint",' . "\n"
+            . '  "processos_rituais": number, // nota de 0.0 a 10.0' . "\n"
+            . '  "documentacao": number, // nota de 0.0 a 10.0' . "\n"
+            . '  "observacoes": "string explicativa sintetizando a sprint e considerando o relato do professor",' . "\n"
             . '  "avaliacoes_individuais": [' . "\n"
             . "    {\n"
             . '      "aluno_id": integer,' . "\n"
             . '      "rituais": number, // nota de 0.0 a 10.0' . "\n"
             . '      "tarefas": number, // nota de 0.0 a 10.0' . "\n"
             . '      "postura": number, // nota de 0.0 a 10.0' . "\n"
-            . '      "observacoes": "string com justificativa sucinta do aluno levando em conta a atuacao tecnica e comportamental"' . "\n"
+            . '      "observacoes": "justificativa sucinta do aluno alinhada com as observacoes do professor"' . "\n"
             . "    }\n"
             . "  ]\n"
             . "}\n\n"
-            . "Dados da Sprint & Relato do Professor:\n" . json_encode($promptData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            . "Dados da Sprint & Instruções do Professor:\n" . json_encode($promptData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         if (!empty($apiKey) && $apiKey !== 'sua_chave_gerada_aqui') {
             try {
@@ -252,10 +255,9 @@ class GeminiAvaliacaoService
             $notaPostura = 8.5;
             $obsAluno = "Aluno {$a['nome']} ({$a['papel']}) concluiu {$a['tarefas_concluidas']} de {$a['tarefas_assumidas']} tarefas.";
 
-            // Se o orientador forneceu observações qualitativas no relato, analisa menções exclusivas a ESTE aluno
+            // Se o orientador forneceu observações qualitativas no relato, analisa menções a ESTE aluno ou orientações gerais
             if ($temContexto) {
                 $primeiroNome = explode(' ', $a['nome'])[0];
-                // Dividir o texto do professor em frases separadas por . ; ou \n
                 $frases = preg_split('/[.;\n]+/', $contextoProfessor);
                 $frasesDoAluno = [];
 
@@ -268,18 +270,20 @@ class GeminiAvaliacaoService
                     }
                 }
 
+                $textoAnalise = !empty($frasesDoAluno) ? implode('. ', $frasesDoAluno) : $contextoProfessor;
                 if (!empty($frasesDoAluno)) {
-                    $trechoExclusivo = implode('. ', $frasesDoAluno);
-                    $obsAluno .= " Parecer do orientador: \"{$trechoExclusivo}\".";
+                    $obsAluno .= " Parecer do orientador: \"{$textoAnalise}\".";
+                }
 
-                    if (preg_match('/(ausente|conflito|atraso|dificuldade|desatento|faltou)/i', $trechoExclusivo)) {
-                        $notaPostura = max(5.0, $notaPostura - 1.5);
-                        $notaRituais = max(5.0, $notaRituais - 1.0);
-                    }
-                    if (preg_match('/(liderou|proativ|excelente|ajudou|dedicou|destacou)/i', $trechoExclusivo)) {
-                        $notaPostura = min(10.0, $notaPostura + 1.0);
-                        $notaRituais = min(10.0, $notaRituais + 1.0);
-                    }
+                // Ajuste de notas com base na análise de sentimentos/palavras-chave do professor
+                if (preg_match('/(ausente|conflito|atraso|dificuldade|desatento|faltou|ruim|baixo|diminu|desconto|prejudic|não fez|nao fez|fraco)/i', $textoAnalise)) {
+                    $notaPostura = max(3.0, $notaPostura - 2.5);
+                    $notaRituais = max(3.0, $notaRituais - 2.0);
+                    $notaTarefas = max(3.0, $notaTarefas - 1.5);
+                }
+                if (preg_match('/(liderou|proativ|excelente|ajudou|dedicou|destacou|ótimo|otimo|parabéns|parabens|bom|alto|bônus|bonus)/i', $textoAnalise)) {
+                    $notaPostura = min(10.0, $notaPostura + 1.5);
+                    $notaRituais = min(10.0, $notaRituais + 1.5);
                 }
             }
 
@@ -293,15 +297,29 @@ class GeminiAvaliacaoService
         }
 
         $obsGeral = "Sprint concluída com {$percentualConclusao}% das tarefas finalizadas.";
+        $entregaValor = $baseNota;
+        $qualidadeTecnica = round(min(10.0, $baseNota + 0.5), 1);
+        $processosRituais = round(min(10.0, $baseNota), 1);
+        $documentacao = round(min(10.0, $baseNota - 0.5), 1);
+
         if ($temContexto) {
             $obsGeral .= " Relato pedagógico do orientador: \"{$contextoProfessor}\".";
+            if (preg_match('/(ruim|baixo|diminu|desconto|prejudic|fraco|atraso|conflito)/i', $contextoProfessor)) {
+                $entregaValor = max(3.0, $entregaValor - 2.0);
+                $qualidadeTecnica = max(3.0, $qualidadeTecnica - 2.0);
+                $processosRituais = max(3.0, $processosRituais - 2.0);
+            }
+            if (preg_match('/(excelente|ótimo|otimo|parabéns|parabens|destacou|proativ)/i', $contextoProfessor)) {
+                $entregaValor = min(10.0, $entregaValor + 1.0);
+                $qualidadeTecnica = min(10.0, $qualidadeTecnica + 1.0);
+            }
         }
 
         return [
-            'entrega_valor' => $baseNota,
-            'qualidade_tecnica' => round(min(10.0, $baseNota + 0.5), 1),
-            'processos_rituais' => round(min(10.0, $baseNota), 1),
-            'documentacao' => round(min(10.0, $baseNota - 0.5), 1),
+            'entrega_valor' => $entregaValor,
+            'qualidade_tecnica' => $qualidadeTecnica,
+            'processos_rituais' => $processosRituais,
+            'documentacao' => $documentacao,
             'observacoes' => $obsGeral,
             'avaliacoes_individuais' => $avaliacoesIndividuais
         ];
