@@ -172,8 +172,9 @@ class GeminiAvaliacaoService
             . "1. Se o campo 'RELATO_DO_PROFESSOR_ORIENTADOR' contiver uma MENÇÃO A NOTA ESPECÍFICA (ex: 'nota 4 para Fulano', 'dar 5 para Beltrano', 'nota 2', 'zerar', 'descontar 3 pontos'), VOCÊ DEVE DEFINIR AS NOTAS NUMÉRICAS DESTE ALUNO EXATAMENTE COM O VALOR SOLICITADO PELO PROFESSOR!\n"
             . "2. Se o relato contiver reclamação ou crítica sobre um aluno (ex: 'faltou', 'veio pouco', 'não produziu', 'atrasado', 'conflito', 'desatento', 'não ajudou'), as notas de 'postura', 'rituais' e 'tarefas' DESTE aluno DEVEM SER BAIXAS (valores entre 1.0 e 5.0). JAMAIS atribua nota 8, 9 ou 10 para um aluno criticado pelo professor!\n"
             . "3. Se o relato contiver elogios para um aluno (ex: 'destaque', 'excelente', 'liderou', 'parabéns'), as notas de 'postura', 'rituais' e 'tarefas' DESTE aluno DEVEM SER ALTAS (valores entre 9.0 e 10.0).\n"
-            . "4. Se o relato contiver crítica ou elogio geral para a equipe inteira (ex: 'grupo ruim', 'equipe desfocada', 'ótima entrega'), altere as notas da sprint ('entrega_valor', 'qualidade_tecnica', 'processos_rituais', 'documentacao') para refletir o parecer.\n"
-            . "5. REGRA DE PRIVACIDADE: O campo 'observacoes' de cada aluno deve conter o motivo da sua nota sem citar nomes dos outros colegas de classe.\n\n"
+            . "4. Se o relato contiver solicitação de nota mínima ou específica para um critério global (ex: 'dê pelo menos 8 na documentação', 'qualidade 9', 'dar 10 no valor'), você DEVE DEFINIR ESSE CAMPO ESPECÍFICO ('documentacao', 'entrega_valor', 'qualidade_tecnica', 'processos_rituais') COM O VALOR SOLICITADO OU SUPERIOR (mínimo solicitado pelo professor)!\n"
+            . "5. Se o relato contiver crítica ou elogio geral para a equipe inteira (ex: 'grupo ruim', 'equipe desfocada', 'ótima entrega'), altere as notas da sprint ('entrega_valor', 'qualidade_tecnica', 'processos_rituais', 'documentacao') para refletir o parecer.\n"
+            . "6. REGRA DE PRIVACIDADE: O campo 'observacoes' de cada aluno deve conter o motivo da sua nota sem citar nomes dos outros colegas de classe.\n\n"
             . "Retorne EXCLUSIVAMENTE um objeto JSON válido (sem qualquer bloco markdown ```json):\n"
             . "{\n"
             . '  "entrega_valor": number,' . "\n"
@@ -319,6 +320,25 @@ class GeminiAvaliacaoService
 
         if ($temContexto) {
             $obsGeral .= " Relato pedagógico do orientador: \"{$contextoProfessor}\".";
+            
+            // Verificação específica para a nota de Documentação
+            if (preg_match('/(?:documenta[çc][ãa]o|doc)\s*(?:[^0-9]*?)(?:pelo menos|m[íi]nimo|nota|dar|atribuir)?\s*([0-9]+(?:\.[0-9]+)?)/i', $contextoProfessor, $matchDoc)) {
+                $documentacao = max($documentacao, floatval($matchDoc[1]));
+            } elseif (preg_match('/(dedicou|dedica[çc][ãa]o|boa|excelente)\s*(?:na|em|com|a)?\s*documenta[çc][ãa]o/i', $contextoProfessor)) {
+                $documentacao = min(10.0, max(8.0, $documentacao + 2.0));
+            }
+
+            // Verificação específica para Entrega de Valor / Qualidade / Rituais
+            if (preg_match('/(?:entrega|valor)\s*(?:[^0-9]*?)(?:pelo menos|m[íi]nimo|nota|dar)?\s*([0-9]+(?:\.[0-9]+)?)/i', $contextoProfessor, $matchEnt)) {
+                $entregaValor = max($entregaValor, floatval($matchEnt[1]));
+            }
+            if (preg_match('/(?:qualidade|t[ée]cnica)\s*(?:[^0-9]*?)(?:pelo menos|m[íi]nimo|nota|dar)?\s*([0-9]+(?:\.[0-9]+)?)/i', $contextoProfessor, $matchTec)) {
+                $qualidadeTecnica = max($qualidadeTecnica, floatval($matchTec[1]));
+            }
+            if (preg_match('/(?:rituais|processos)\s*(?:[^0-9]*?)(?:pelo menos|m[íi]nimo|nota|dar)?\s*([0-9]+(?:\.[0-9]+)?)/i', $contextoProfessor, $matchRit)) {
+                $processosRituais = max($processosRituais, floatval($matchRit[1]));
+            }
+
             if (preg_match('/(ruim|baixo|diminu|desconto|prejudic|fraco|atraso|conflito)/i', $contextoProfessor)) {
                 $entregaValor = max(3.0, $entregaValor - 2.0);
                 $qualidadeTecnica = max(3.0, $qualidadeTecnica - 2.0);
