@@ -1340,15 +1340,32 @@ const parseDetalhes = (detalhes) => {
 
         <div class="p-5 space-y-5 overflow-y-auto flex-1 bg-slate-50/50">
           
-          <!-- Banner de Ação com Botão IA Destaque -->
+          <!-- Observações Contextuais do Professor sobre Relacionamento Interpessoal e Dinâmica (PASSO 1) -->
+          <div class="bg-amber-50/90 p-3.5 rounded-lg border border-amber-300 space-y-1.5 shadow-2xs">
+            <label class="block text-xs font-bold text-amber-950 flex items-center space-x-1.5">
+              <MessageSquare class="w-4 h-4 text-amber-700" />
+              <span>1. Relato do Orientador (Relacionamento Interpessoal, Mediação e Dinâmica em Sala)</span>
+            </label>
+            <p class="text-[11px] text-amber-900/90 leading-snug">
+              Preencha aqui fatos comportamentais presenciais, conflitos mediados ou notas/pontos específicos para o <strong>Gemini AI</strong> calcular as notas numéricas dos alunos.
+            </p>
+            <textarea
+              v-model="contextoProfessorInput"
+              rows="2"
+              placeholder="Ex: Dar nota 4 para o Carlos por faltas; Ana liderou bem e merece nota 10; descontar 2 pontos do grupo por atrasos..."
+              class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none placeholder:text-slate-400"
+            ></textarea>
+          </div>
+
+          <!-- Banner de Ação com Botão IA Destaque (PASSO 2) -->
           <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-lg p-4 text-white shadow-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div>
               <h4 class="text-sm font-bold flex items-center space-x-1.5 text-purple-200">
                 <Sparkles class="w-4 h-4 text-amber-300 animate-pulse" />
-                <span>Avaliação Automática com Gemini AI</span>
+                <span>2. Avaliação Automática com Gemini AI</span>
               </h4>
               <p class="text-xs text-purple-100/80 mt-0.5">
-                Analisa o histórico de tarefas concluídas, entregas e o relato qualitativo do professor para sugerir notas.
+                Analisa o relato preenchido acima junto ao histórico da Sprint para calcular e sugerir as notas numéricas.
               </p>
             </div>
             <button
@@ -1360,23 +1377,6 @@ const parseDetalhes = (detalhes) => {
               <Sparkles v-else class="w-4 h-4 text-slate-950" />
               <span>{{ isCarregandoIA ? 'Analisando Sprint...' : '✨ Sugerir Avaliação com IA' }}</span>
             </button>
-          </div>
-
-          <!-- Observações Contextuais do Professor sobre Relacionamento Interpessoal e Dinâmica -->
-          <div class="bg-amber-50/90 p-3.5 rounded-lg border border-amber-300 space-y-1.5 shadow-2xs">
-            <label class="block text-xs font-bold text-amber-950 flex items-center space-x-1.5">
-              <MessageSquare class="w-4 h-4 text-amber-700" />
-              <span>Relato do Orientador (Relacionamento Interpessoal, Mediação e Dinâmica em Sala)</span>
-            </label>
-            <p class="text-[11px] text-amber-900/90 leading-snug">
-              Descreva fatos comportamentais presenciais, conflitos mediados ou apoio presencial em sala de aula para o <strong>Gemini AI</strong> considerar nas notas de Postura e Rituais.
-            </p>
-            <textarea
-              v-model="contextoProfessorInput"
-              rows="2"
-              placeholder="Ex: Ana mediou bem os conflitos da equipe e liderou em sala; Carlos teve dificuldades de relacionamento e faltou nas reuniões..."
-              class="w-full border border-amber-300 rounded px-2.5 py-1.5 text-xs text-slate-800 bg-white focus:ring-1 focus:ring-amber-500 focus:outline-none placeholder:text-slate-400"
-            ></textarea>
           </div>
 
           <!-- Resumo de Conclusão da Sprint -->
