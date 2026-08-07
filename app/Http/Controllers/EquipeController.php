@@ -41,6 +41,7 @@ class EquipeController extends Controller
                     'url' => $e->url,
                     'github' => $e->github,
                     'prof_id' => $e->prof_id,
+                    'assentos' => $e->assentos ?? [],
                     'professor_nome' => $e->professor?->nome ?? 'Sem Orientador',
                     'integrantes_count' => $e->alunos->count(),
                     'sprint_ativa_nome' => $sprintAtiva ? "Sprint {$sprintAtiva->sequencia}" : 'Sem Sprint',
@@ -119,5 +120,28 @@ class EquipeController extends Controller
         ]);
 
         return back()->with('success', 'Equipe atualizada com sucesso!');
+    }
+
+    /**
+     * Atualizar a alocação de assentos da equipe
+     */
+    public function salvarAssentos(Request $request, $id)
+    {
+        if (session('user_type') !== 'professor') {
+            return back()->withErrors(['equipe' => 'Apenas professores podem alterar os lugares da equipe.']);
+        }
+
+        $equipe = Equipe::findOrFail($id);
+
+        $request->validate([
+            'assentos' => 'nullable|array',
+            'assentos.*' => 'string'
+        ]);
+
+        $equipe->update([
+            'assentos' => $request->input('assentos', [])
+        ]);
+
+        return back()->with('success', 'Lugares da equipe atualizados com sucesso!');
     }
 }

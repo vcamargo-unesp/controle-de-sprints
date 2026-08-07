@@ -30,11 +30,14 @@ import {
   Trash2,
   Sparkles,
   Loader2,
-  Award
+  Award,
+  Monitor,
+  Save
 } from 'lucide-vue-next';
 
 const props = defineProps({
   equipe: Object,
+  outrasEquipesAssentos: Array,
   abaAtiva: String,
   userRole: String,
   userId: Number,
@@ -61,6 +64,54 @@ const modalHistoricoAberto = ref(false);
 const tarefaSelecionada = ref(null);
 
 const modalIntegrantesAberto = ref(false);
+
+// Minimapa de Lugares (LDIs)
+const ldiSelecionado = ref('LDI 4'); // Default LDI 4
+const assentosSelecionados = ref([...(props.equipe?.assentos || [])]);
+const salvandoAssentos = ref(false);
+
+// Sincroniza assentosSelecionados se a prop equipe mudar
+watch(() => props.equipe?.assentos, (novos) => {
+  assentosSelecionados.value = [...(novos || [])];
+}, { deep: true });
+
+// Mapeamento de ocupação dos assentos por outras equipes da mesma turma
+const mapaOcupacaoOutrasEquipes = computed(() => {
+  const mapa = {};
+  if (!props.outrasEquipesAssentos) return mapa;
+  props.outrasEquipesAssentos.forEach(eq => {
+    if (eq.id === props.equipe?.id) return;
+    const assentos = eq.assentos || [];
+    assentos.forEach(aKey => {
+      mapa[aKey] = eq.nome;
+    });
+  });
+  return mapa;
+});
+
+const alternarAssento = (keyAssento) => {
+  if (props.userRole !== 'professor') return; // Apenas professores podem editar
+  const idx = assentosSelecionados.value.indexOf(keyAssento);
+  if (idx > -1) {
+    assentosSelecionados.value.splice(idx, 1);
+  } else {
+    assentosSelecionados.value.push(keyAssento);
+  }
+};
+
+const salvarAssentosEquipe = () => {
+  if (props.userRole !== 'professor') return;
+  salvandoAssentos.value = true;
+  router.post(`/equipes/${props.equipe.id}/assentos`, {
+    assentos: assentosSelecionados.value
+  }, {
+    preserveScroll: true,
+    preserveState: true,
+    onFinish: () => {
+      salvandoAssentos.value = false;
+    }
+  });
+};
 
 const modalEncerramentoAberto = ref(false);
 const feedbackProfessorInput = ref('');
@@ -1544,58 +1595,264 @@ const parseDetalhes = (detalhes) => {
         </div>
       </div>
     </div>
-    <!-- MODAL DE INTEGRANTES DA EQUIPE -->
+    <!-- MODAL DE INTEGRANTES DA EQUIPE & MAPA DE LUGARES DA SALA (LDIs) -->
     <div v-if="modalIntegrantesAberto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden border border-slate-200">
-        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl overflow-hidden border border-slate-200 max-h-[90vh] flex flex-col">
+        <div class="bg-[#0F2537] px-4 py-3 text-white flex items-center justify-between shrink-0">
           <h3 class="text-sm font-bold flex items-center space-x-2">
             <Users class="w-4 h-4 text-emerald-400" />
-            <span>Integrantes da {{ equipe.nome }}</span>
+            <span>Integrantes & Lugares nos LDIs — {{ equipe.nome }}</span>
           </h3>
           <button @click="modalIntegrantesAberto = false" class="text-slate-300 hover:text-white cursor-pointer">
             <X class="w-5 h-5" />
           </button>
         </div>
 
-        <div class="p-4 overflow-y-auto max-h-[60vh]">
-          <table class="w-full text-left border-collapse siep-table-compact">
-            <thead>
-              <tr class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
-                <th class="w-10 text-center py-2">Nº</th>
-                <th>Nome do Aluno</th>
-                <th>E-mail Institucional</th>
-                <th class="text-center">Papel</th>
-                <th class="text-center">RA</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200 text-xs">
-              <tr v-for="aluno in equipe.alunos" :key="aluno.id" class="hover:bg-slate-50">
-                <td class="text-center font-mono font-bold text-slate-500 py-2">{{ aluno.n_chamada || '-' }}</td>
-                <td class="font-bold text-slate-900">{{ aluno.nome }}</td>
-                <td class="text-slate-600 font-mono text-[11px]">{{ aluno.email }}</td>
-                <td class="text-center">
-                  <span :class="[
-                    'text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border',
-                    aluno.papel === 'PO' ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-700 border-slate-300'
-                  ]">
-                    {{ aluno.papel || 'Dev' }}
-                  </span>
-                </td>
-                <td class="text-center font-mono text-[11px] text-slate-500">{{ aluno.ra || '-' }}</td>
-              </tr>
-              <tr v-if="!equipe.alunos || equipe.alunos.length === 0">
-                <td colspan="5" class="text-center py-6 text-slate-500 font-medium">
-                  Nenhum aluno vinculado a esta equipe no momento.
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="p-4 overflow-y-auto space-y-6">
+          <!-- Tabela de Alunos -->
+          <div>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+              <Users class="w-3.5 h-3.5 text-slate-600" />
+              <span>Lista de Alunos da Equipe</span>
+            </h4>
+            <table class="w-full text-left border-collapse siep-table-compact">
+              <thead>
+                <tr class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200">
+                  <th class="w-10 text-center py-2">Nº</th>
+                  <th>Nome do Aluno</th>
+                  <th>E-mail Institucional</th>
+                  <th class="text-center">Papel</th>
+                  <th class="text-center">RA</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 text-xs">
+                <tr v-for="aluno in equipe.alunos" :key="aluno.id" class="hover:bg-slate-50">
+                  <td class="text-center font-mono font-bold text-slate-500 py-2">{{ aluno.n_chamada || '-' }}</td>
+                  <td class="font-bold text-slate-900">{{ aluno.nome }}</td>
+                  <td class="text-slate-600 font-mono text-[11px]">{{ aluno.email }}</td>
+                  <td class="text-center">
+                    <span :class="[
+                      'text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border',
+                      aluno.papel === 'PO' ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-slate-100 text-slate-700 border-slate-300'
+                    ]">
+                      {{ aluno.papel || 'Dev' }}
+                    </span>
+                  </td>
+                  <td class="text-center font-mono text-[11px] text-slate-500">{{ aluno.ra || '-' }}</td>
+                </tr>
+                <tr v-if="!equipe.alunos || equipe.alunos.length === 0">
+                  <td colspan="5" class="text-center py-4 text-slate-500 font-medium">
+                    Nenhum aluno vinculado a esta equipe no momento.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SEÇÃO DO MINIMAPA DE LDIs (CINEMA STYLE) -->
+          <div class="border-t border-slate-200 pt-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Monitor class="w-4 h-4 text-emerald-600" />
+                  <span>Mapa de Assentos Didáticos (LDIs)</span>
+                </h4>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Visualização dos lugares nos laboratórios LDI 3 e LDI 4 (Estrutura Espelhada).
+                  <span v-if="userRole === 'professor'" class="text-emerald-700 font-semibold">Clique nos assentos para selecionar/desmarcar os lugares da equipe.</span>
+                  <span v-else class="text-slate-600 italic">Consulta de lugares ocupados pela equipe.</span>
+                </p>
+              </div>
+
+              <!-- Selector de LDI -->
+              <div class="flex items-center gap-2 shrink-0 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                <label class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  Laboratório:
+                </label>
+                <select 
+                  v-model="ldiSelecionado" 
+                  class="text-xs font-bold border-slate-300 rounded bg-white text-slate-800 px-2 py-1 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer shadow-xs"
+                >
+                  <option value="LDI 4">LDI 4 (Vista da Porta)</option>
+                  <option value="LDI 3">LDI 3 (Espelhado)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- LEGENDA DOS ASSENTOS -->
+            <div class="flex flex-wrap items-center justify-center gap-4 bg-slate-50 p-2.5 rounded-md border border-slate-200 mb-4 text-xs font-medium">
+              <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded bg-emerald-500 border border-emerald-600 shadow-xs inline-block"></span>
+                <span class="text-slate-700 font-bold">Lugar da {{ equipe.nome }}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded bg-amber-400 border border-amber-500 shadow-xs inline-block"></span>
+                <span class="text-slate-700">Outra Equipe</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded bg-slate-200 border border-slate-300 inline-block"></span>
+                <span class="text-slate-600">Assento Livre</span>
+              </div>
+            </div>
+
+            <!-- TELA / LOUSA DO PROFESSOR (REFERÊNCIA DE CINEMA) -->
+            <div class="mb-5 flex flex-col items-center">
+              <div class="w-2/3 h-6 bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 text-white text-[10px] uppercase font-bold tracking-widest flex items-center justify-center rounded shadow-xs border border-slate-900">
+                <span>[ LOUSA / QUADRO DO PROFESSOR & PORTA ]</span>
+              </div>
+              <div class="w-3/4 h-1 bg-slate-300/60 rounded-full mt-1"></div>
+            </div>
+
+            <!-- BANCADAS DE ACORDO COM O LDI SELECIONADO -->
+            <div class="space-y-3 bg-slate-950/5 p-4 rounded-xl border border-slate-200/80">
+              <div 
+                v-for="bancadaNum in 6" 
+                :key="bancadaNum" 
+                class="flex items-center justify-between gap-3 bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs"
+              >
+                <!-- Identificador da Bancada -->
+                <div class="w-16 shrink-0 text-center">
+                  <span class="text-[11px] font-extrabold text-slate-500 uppercase block tracking-wider">Bancada</span>
+                  <span class="text-sm font-black text-slate-800 font-mono">0{{ bancadaNum }}</span>
+                </div>
+
+                <!-- ESTRUTURA DOS LUGARES (ESQUERDA 2 ASSENTOS, CORREDOR, DIREITA 4 ASSENTOS) -->
+                <!-- No LDI 4: Esquerda = C1, C2 | Corredor | Direita = C3, C4, C5, C6 -->
+                <!-- No LDI 3 (Espelhado): Direita = C1, C2 | Corredor | Esquerda = C3, C4, C5, C6 -->
+                <div class="flex-1 flex items-center justify-center gap-4 sm:gap-6">
+                  
+                  <!-- BLOCO ESQUERDO (2 Lugares no LDI 4, 4 Lugares no LDI 3) -->
+                  <div class="flex items-center gap-1.5">
+                    <template v-if="ldiSelecionado === 'LDI 4'">
+                      <button
+                        v-for="c in [1, 2]"
+                        :key="`b${bancadaNum}-c${c}`"
+                        @click="alternarAssento(`B${bancadaNum}-C${c}`)"
+                        :disabled="userRole !== 'professor'"
+                        :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
+                        :class="[
+                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
+                              ? 'bg-amber-100 border-amber-300 text-amber-800'
+                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
+                          userRole === 'professor' ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                        ]"
+                      >
+                        {{ c }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <!-- LDI 3: Espelhado (4 assentos na esquerda) -->
+                      <button
+                        v-for="c in [6, 5, 4, 3]"
+                        :key="`b${bancadaNum}-c${c}`"
+                        @click="alternarAssento(`B${bancadaNum}-C${c}`)"
+                        :disabled="userRole !== 'professor'"
+                        :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
+                        :class="[
+                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
+                              ? 'bg-amber-100 border-amber-300 text-amber-800'
+                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
+                          userRole === 'professor' ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                        ]"
+                      >
+                        {{ c }}
+                      </button>
+                    </template>
+                  </div>
+
+                  <!-- CORREDOR CENTRAL -->
+                  <div class="px-2 py-0.5 rounded bg-slate-200/70 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border border-slate-300/80">
+                    Corredor
+                  </div>
+
+                  <!-- BLOCO DIREITO (4 Lugares no LDI 4, 2 Lugares no LDI 3) -->
+                  <div class="flex items-center gap-1.5">
+                    <template v-if="ldiSelecionado === 'LDI 4'">
+                      <button
+                        v-for="c in [3, 4, 5, 6]"
+                        :key="`b${bancadaNum}-c${c}`"
+                        @click="alternarAssento(`B${bancadaNum}-C${c}`)"
+                        :disabled="userRole !== 'professor'"
+                        :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
+                        :class="[
+                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
+                              ? 'bg-amber-100 border-amber-300 text-amber-800'
+                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
+                          userRole === 'professor' ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                        ]"
+                      >
+                        {{ c }}
+                      </button>
+                    </template>
+                    <template v-else>
+                      <!-- LDI 3: Espelhado (2 assentos na direita) -->
+                      <button
+                        v-for="c in [2, 1]"
+                        :key="`b${bancadaNum}-c${c}`"
+                        @click="alternarAssento(`B${bancadaNum}-C${c}`)"
+                        :disabled="userRole !== 'professor'"
+                        :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
+                        :class="[
+                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
+                              ? 'bg-amber-100 border-amber-300 text-amber-800'
+                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
+                          userRole === 'professor' ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                        ]"
+                      >
+                        {{ c }}
+                      </button>
+                    </template>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-3 text-right">
+              <span class="text-xs font-bold text-slate-600">
+                Assentos Selecionados para a {{ equipe.nome }}: 
+                <span class="text-emerald-600 font-extrabold">{{ assentosSelecionados.length }}</span>
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div class="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end">
-          <button @click="modalIntegrantesAberto = false" class="px-3.5 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer">
-            Fechar
-          </button>
+        <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 flex justify-between items-center shrink-0">
+          <div class="text-xs text-slate-500 font-medium">
+            <span v-if="userRole === 'professor'">Você está no modo de edição (Professor).</span>
+            <span v-else>Você está no modo de consulta (Aluno).</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button 
+              @click="modalIntegrantesAberto = false" 
+              class="px-3.5 py-1.5 rounded border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              Fechar
+            </button>
+            <button 
+              v-if="userRole === 'professor'"
+              @click="salvarAssentosEquipe" 
+              :disabled="salvandoAssentos"
+              class="px-4 py-1.5 rounded bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            >
+              <Loader2 v-if="salvandoAssentos" class="w-3.5 h-3.5 animate-spin" />
+              <Save v-else class="w-3.5 h-3.5" />
+              <span>Salvar Lugares</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

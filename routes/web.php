@@ -24,6 +24,7 @@ Route::middleware(['session.auth'])->group(function () {
     Route::get('/equipes', [EquipeController::class, 'index'])->name('equipes.index');
     Route::post('/equipes', [EquipeController::class, 'store'])->name('equipes.store');
     Route::put('/equipes/{id}', [EquipeController::class, 'update'])->name('equipes.update');
+    Route::post('/equipes/{id}/assentos', [EquipeController::class, 'salvarAssentos'])->name('equipes.assentos');
     
     // Importação de Alunos via CSV
     Route::post('/importar-alunos', [ImportacaoController::class, 'importarAlunos'])->name('importar.alunos');

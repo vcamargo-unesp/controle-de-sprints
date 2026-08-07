@@ -256,8 +256,14 @@ class KanbanController extends Controller
                 ];
             });
 
+        // Buscar alocações de assentos de todas as equipes do mesmo ano/turma da equipe atual
+        $outrasEquipesAssentos = Equipe::where('ano', $equipe->ano)
+            ->where('turma', $equipe->turma)
+            ->get(['id', 'nome', 'assentos']);
+
         return Inertia::render('Equipes/Show', [
             'equipe'           => $equipe,
+            'outrasEquipesAssentos' => $outrasEquipesAssentos,
             'abaAtiva'         => $aba,
             'userRole'         => $role,
             'userId'           => $userId,

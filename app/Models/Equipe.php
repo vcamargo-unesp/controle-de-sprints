@@ -8,7 +8,11 @@ class Equipe extends Model
 {
     protected $table = 'equipes';
     public $timestamps = false;
-    protected $fillable = ['nome', 'descricao', 'ano', 'turma', 'url', 'github', 'prof_id'];
+    protected $fillable = ['nome', 'descricao', 'ano', 'turma', 'url', 'github', 'prof_id', 'assentos'];
+
+    protected $casts = [
+        'assentos' => 'array',
+    ];
 
     public function professor()
     {
