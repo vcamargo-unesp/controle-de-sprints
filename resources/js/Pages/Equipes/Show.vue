@@ -1696,33 +1696,27 @@ const parseDetalhes = (detalhes) => {
             </div>
 
             <!-- TELA / LOUSA DO PROFESSOR (REFERÊNCIA DE CINEMA) -->
-            <div class="mb-5 flex flex-col items-center">
-              <div class="w-2/3 h-6 bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 text-white text-[10px] uppercase font-bold tracking-widest flex items-center justify-center rounded shadow-xs border border-slate-900">
-                <span>[ LOUSA / QUADRO DO PROFESSOR & PORTA ]</span>
+            <div class="mb-4 flex flex-col items-center">
+              <div class="w-full sm:w-1/2 h-5 bg-gradient-to-r from-slate-700 via-slate-800 to-slate-700 text-white text-[10px] uppercase font-black tracking-widest flex items-center justify-center rounded shadow-xs border border-slate-900">
+                <span>LOUSA</span>
               </div>
-              <div class="w-3/4 h-1 bg-slate-300/60 rounded-full mt-1"></div>
+              <div class="w-2/3 h-0.5 bg-slate-300/60 rounded-full mt-1"></div>
             </div>
 
             <!-- BANCADAS DE ACORDO COM O LDI SELECIONADO -->
-            <div class="space-y-3 bg-slate-950/5 p-4 rounded-xl border border-slate-200/80">
+            <div class="space-y-1.5 bg-slate-950/5 p-2 sm:p-3 rounded-xl border border-slate-200/80 max-w-xl mx-auto overflow-x-auto">
               <div 
                 v-for="bancadaNum in 6" 
                 :key="bancadaNum" 
-                class="flex items-center justify-between gap-3 bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs"
+                class="flex items-center justify-center gap-2 sm:gap-4 bg-white p-1.5 sm:p-2 rounded-lg border border-slate-200 shadow-xs"
               >
-                <!-- Identificador da Bancada -->
-                <div class="w-16 shrink-0 text-center">
-                  <span class="text-[11px] font-extrabold text-slate-500 uppercase block tracking-wider">Bancada</span>
-                  <span class="text-sm font-black text-slate-800 font-mono">0{{ bancadaNum }}</span>
-                </div>
-
                 <!-- ESTRUTURA DOS LUGARES (ESQUERDA 2 ASSENTOS, CORREDOR, DIREITA 4 ASSENTOS) -->
                 <!-- No LDI 4: Esquerda = C1, C2 | Corredor | Direita = C3, C4, C5, C6 -->
                 <!-- No LDI 3 (Espelhado): Direita = C1, C2 | Corredor | Esquerda = C3, C4, C5, C6 -->
-                <div class="flex-1 flex items-center justify-center gap-4 sm:gap-6">
+                <div class="flex items-center justify-center gap-2 sm:gap-4 w-full">
                   
                   <!-- BLOCO ESQUERDO (2 Lugares no LDI 4, 4 Lugares no LDI 3) -->
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1 sm:gap-1.5">
                     <template v-if="ldiSelecionado === 'LDI 4'">
                       <button
                         v-for="c in [1, 2]"
@@ -1731,9 +1725,9 @@ const parseDetalhes = (detalhes) => {
                         :disabled="userRole !== 'professor'"
                         :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
                         :class="[
-                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          'w-6 h-6 sm:w-7 sm:h-7 rounded font-mono text-[11px] font-bold flex items-center justify-center transition-all duration-150 relative border shrink-0',
                           assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
-                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs ring-2 ring-emerald-300 scale-105 z-10'
                             : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
                               ? 'bg-amber-100 border-amber-300 text-amber-800'
                               : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
@@ -1752,9 +1746,9 @@ const parseDetalhes = (detalhes) => {
                         :disabled="userRole !== 'professor'"
                         :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
                         :class="[
-                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          'w-6 h-6 sm:w-7 sm:h-7 rounded font-mono text-[11px] font-bold flex items-center justify-center transition-all duration-150 relative border shrink-0',
                           assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
-                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs ring-2 ring-emerald-300 scale-105 z-10'
                             : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
                               ? 'bg-amber-100 border-amber-300 text-amber-800'
                               : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
@@ -1767,12 +1761,12 @@ const parseDetalhes = (detalhes) => {
                   </div>
 
                   <!-- CORREDOR CENTRAL -->
-                  <div class="px-2 py-0.5 rounded bg-slate-200/70 text-[9px] font-extrabold text-slate-500 uppercase tracking-widest border border-slate-300/80">
+                  <div class="px-1.5 py-0.5 rounded bg-slate-200/80 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-wider border border-slate-300/80 shrink-0">
                     Corredor
                   </div>
 
                   <!-- BLOCO DIREITO (4 Lugares no LDI 4, 2 Lugares no LDI 3) -->
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1 sm:gap-1.5">
                     <template v-if="ldiSelecionado === 'LDI 4'">
                       <button
                         v-for="c in [3, 4, 5, 6]"
@@ -1781,9 +1775,9 @@ const parseDetalhes = (detalhes) => {
                         :disabled="userRole !== 'professor'"
                         :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
                         :class="[
-                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          'w-6 h-6 sm:w-7 sm:h-7 rounded font-mono text-[11px] font-bold flex items-center justify-center transition-all duration-150 relative border shrink-0',
                           assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
-                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs ring-2 ring-emerald-300 scale-105 z-10'
                             : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
                               ? 'bg-amber-100 border-amber-300 text-amber-800'
                               : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
@@ -1802,9 +1796,9 @@ const parseDetalhes = (detalhes) => {
                         :disabled="userRole !== 'professor'"
                         :title="mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`] ? `Ocupado por ${mapaOcupacaoOutrasEquipes['B'+bancadaNum+'-C'+c]}` : `Assento B${bancadaNum}-C${c}`"
                         :class="[
-                          'w-7 h-7 sm:w-8 sm:h-8 rounded-md font-mono text-xs font-bold flex items-center justify-center transition-all duration-150 relative border',
+                          'w-6 h-6 sm:w-7 sm:h-7 rounded font-mono text-[11px] font-bold flex items-center justify-center transition-all duration-150 relative border shrink-0',
                           assentosSelecionados.includes(`B${bancadaNum}-C${c}`)
-                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-md ring-2 ring-emerald-300 scale-105 z-10'
+                            ? 'bg-emerald-500 border-emerald-600 text-white shadow-xs ring-2 ring-emerald-300 scale-105 z-10'
                             : mapaOcupacaoOutrasEquipes[`B${bancadaNum}-C${c}`]
                               ? 'bg-amber-100 border-amber-300 text-amber-800'
                               : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200 hover:border-slate-300',
